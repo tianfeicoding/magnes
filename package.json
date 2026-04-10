@@ -1,0 +1,20 @@
+{
+    "name": "magnes-studio",
+    "version": "1.0.0",
+    "description": "Magnes Studio - AI-powered workflow builder",
+    "scripts": {
+        "build": "npm run clean && node scripts/generate-build-info.js && babel frontend/src frontend/research --out-dir frontend/js/compiled --copy-files",
+        "build:watch": "node scripts/generate-build-info.js && babel frontend/src frontend/research --out-dir frontend/js/compiled --watch --copy-files",
+        "clean": "rm -rf frontend/js/compiled/*"
+    },
+    "devDependencies": {
+        "@babel/cli": "^7.23.0",
+        "@babel/core": "^7.23.0",
+        "@babel/preset-react": "^7.23.0"
+    },
+    "babel": {
+        "presets": [
+            "@babel/preset-react"
+        ]
+    }
+}

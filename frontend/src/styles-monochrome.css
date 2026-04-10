@@ -1,0 +1,134 @@
+/* Precision Monochrome Global Styles */
+
+:root {
+    --mono-black: #000000;
+    --mono-white: #ffffff;
+    --mono-border: #000000;
+}
+
+/* 字体加载 */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=JetBrains+Mono:wght@400;500&family=Syne:wght@700&display=swap');
+
+/* 全局重置为 0px 圆角 */
+* {
+    border-radius: 0px !important;
+}
+
+body {
+    font-family: 'JetBrains Mono', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.mono-header-text {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.mono-tool-text {
+    font-size: 12px;
+}
+
+/* 纹理背景定义 */
+
+/* Hatched Pattern (斜纹) - Header for Style/Creative nodes */
+.bg-mono-hatched {
+    background-color: #ffffff;
+    background-image: repeating-linear-gradient(45deg,
+            #000000,
+            #000000 1px,
+            transparent 1px,
+            transparent 8px);
+}
+
+/* Dot Grid Pattern (点阵) - Body for Preview nodes */
+.bg-mono-dot {
+    background-color: #ffffff;
+    background-image: radial-gradient(#000000 0.5px, transparent 0.5px);
+    background-size: 8px 8px;
+}
+
+/* No Shadows for clean look */
+.mono-shadow {
+    box-shadow: none !important;
+}
+
+/* Inputs - Bottom Border Only */
+.mono-input {
+    background: transparent !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 2px solid #000000 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.mono-input:focus {
+    background: #f9fafb !important;
+    outline: none !important;
+}
+
+/* Rounded Buttons Reset */
+button,
+.btn {
+    border-radius: 0px !important;
+}
+
+/* Handle Reset (React Flow) */
+.react-flow__handle {
+    border-radius: 0px !important;
+    width: 12px !important;
+    height: 12px !important;
+    background: #ffffff !important;
+    border: 2px solid #000000 !important;
+}
+
+/* Remove React Flow Selection Blue Border */
+.react-flow__node:focus {
+    outline: none !important;
+}
+
+.react-flow__node.selected {
+    box-shadow: none !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+    stroke: #000000 !important;
+    stroke-width: 3px !important;
+}
+
+.react-flow__edge-path {
+    stroke: #000000 !important;
+    stroke-width: 2px !important;
+}
+
+.react-flow__connection-path {
+    stroke: #000000 !important;
+    stroke-width: 2px !important;
+}
+
+/* Custom Scrollbar - Precision Monochrome Style */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+    /* Create a narrow white vertical line using borders and background-clip */
+    border-left: 2px solid transparent;
+    border-right: 3px solid transparent;
+    background-color: rgba(255, 255, 255, 0.4) !important;
+    background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #ffffff !important;
+    border: 1px solid #000000 !important;
+    border-radius: 0px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #f0f0f0 !important;
+}

@@ -1,0 +1,39 @@
+{
+  "extraction_method": "magnes_backend_style",
+  "selection_criteria": "market_priority_info_completeness",
+  "total_events": 14,
+  "market_count": 7,
+  "exhibition_count": 4,
+  "top3_events": [
+    {
+      "rank": 1,
+      "name": "Gula Market 3.1-3.3 11:00-18:00",
+      "date": "3.1-3.3",
+      "venue": "静安区延平路443号二层",
+      "price": "免费",
+      "description": "静安区延平路443号二层 免费",
+      "type": "market",
+      "source": "合集子活动"
+    },
+    {
+      "rank": 2,
+      "name": "Savvy Market 3.2-3.3&3.9-3.10 12:00",
+      "date": "3.2-3.3",
+      "venue": "黄浦区枫泾路28号",
+      "price": "免费",
+      "description": "黄浦区枫泾路28号 免门票",
+      "type": "market",
+      "source": "合集子活动"
+    },
+    {
+      "rank": 3,
+      "name": "外滩漫步面包节 3.16-3.17&3.23-3.24 11:00-2",
+      "date": "3.16-3.17",
+      "venue": "外滩",
+      "price": "免费",
+      "description": "BFC外滩枫泾 免门票",
+      "type": "market",
+      "source": "合集子活动"
+    }
+  ]
+}

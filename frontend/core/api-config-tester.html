@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BaseAPI 配置测试器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 1rem;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            height: calc(100vh - 2rem);
+        }
+
+        .header {
+            background: white;
+            border-radius: 1rem;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+        }
+
+        .header-left h1 {
+            font-size: 1.5rem;
+            color: #4c1d95;
+            margin-bottom: 0.2rem;
+        }
+
+        .header-left p {
+            font-size: 0.85rem;
+            color: #6b7280;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 1rem;
+            flex: 1;
+            min-height: 0;
+            /* 重要：允许在 flex 容器中滚动 */
+        }
+
+        .left-panel,
+        .right-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 1rem;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        .left-panel {
+            flex: 4;
+            /* 左侧占 40% */
+        }
+
+        .right-panel {
+            flex: 6;
+            /* 右侧占 60% */
+        }
+
+        /* 滚动条美化 */
+        .left-panel::-webkit-scrollbar,
+        .right-panel::-webkit-scrollbar,
+        .output::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .left-panel::-webkit-scrollbar-track,
+        .right-panel::-webkit-scrollbar-track,
+        .output::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 3px;
+        }
+
+        .left-panel::-webkit-scrollbar-thumb,
+        .right-panel::-webkit-scrollbar-thumb,
+        .output::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+
+        .section {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+
+        .section h2 {
+            font-size: 1rem;
+            color: #4b5563;
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-content {
+            font-size: 0.9rem;
+        }
+
+        .input-group {
+            margin-bottom: 0.8rem;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 0.3rem;
+            font-weight: 500;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 0.85rem;
+            transition: border-color 0.15s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        button {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: #6d28d9;
+            color: white;
+        }
+
+        .btn-success {
+            background: #059669;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #d97706;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #4b5563;
+            color: white;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .output-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #334155;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .grid-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .mini-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .mini-card:hover {
+            border-color: #a78bfa;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .mini-card h3 {
+            font-size: 0.9rem;
+            color: #1f2937;
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+
+        .mini-card p {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-bottom: 0.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .type-badge {
+            font-size: 0.7rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.2rem;
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot-green {
+            background-color: #10b981;
+        }
+
+        .dot-red {
+            background-color: #ef4444;
+        }
+
+        .dot-gray {
+            background-color: #d1d5db;
+        }
+
+        .dot-yellow {
+            background-color: #f59e0b;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* 紧凑模式下的日志显示 */
+        #testLog {
+            height: 100%;
+            min-height: 150px;
+            background: #f8fafc;
+            border-radius: 0.375rem;
+            padding: 0.5rem;
+        }
+
+        .log-entry {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #f1f5f9;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-time {
+            color: #9ca3af;
+            margin-right: 0.5rem;
+        }
+
+        .log-success {
+            color: #059669;
+        }
+
+        .log-error {
+            color: #dc2626;
+        }
+
+        .log-info {
+            color: #4b5563;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- 顶部通栏：标题与全局状态 -->
+        <div class="header">
+            <div class="header-left">
+                <h1>🧪 BaseAPI 配置测试器</h1>
+                <p>集中管理与验证 API 配置连接状态</p>
+            </div>
+            <div class="header-right">
+                <div id="status-badges" style="display: flex; gap: 0.5rem;">
+                    <!-- 动态状态标签 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区：左右分栏 -->
+        <div class="main-content">
+            <!-- 左侧：控制面板与设置 -->
+            <div class="left-panel">
+                <!-- 快捷操作 -->
+                <div class="section">
+                    <h2>🎮 快捷操作</h2>
+                    <div class="btn-group">
+                        <button class="btn-primary" onclick="testAllAPIs()">🚀 全面测试</button>
+                        <button class="btn-success" onclick="syncProductionConfigs()">⚡ 同步生产配置</button>
+                        <button class="btn-warning" onclick="loadConfigs(); displayConfigs();">🔄 刷新配置</button>
+                        <button class="btn-danger" onclick="testResetToDefaults()">⚡ 重置默认</button>
+                        <button class="btn-secondary" onclick="clearStorage()">🗑️ 清空缓存</button>
+                    </div>
+                </div>
+
+                <!-- 全局设置 -->
+                <div class="section">
+                    <h2>⚙️ 全局设置</h2>
+                    <div class="input-group">
+                        <label>Global API Key</label>
+                        <input type="password" id="globalKeyInput" placeholder="sk-..." onchange="testSetGlobalKey()">
+                    </div>
+                    <div class="input-group">
+                        <label>Global API URL</label>
+                        <input type="text" id="globalUrlInput" placeholder="https://api.example.com"
+                            value="https://ai.comfly.chat" oninput="onGlobalUrlChange()">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn-success" onclick="testSetGlobalKey()">💾 保存设置</button>
+                    </div>
+                </div>
+
+                <!-- 功能测试区域 -->
+                <div class="section">
+                    <h2>🔧 功能验证</h2>
+                    <div class="btn-group">
+                        <button class="btn-secondary" onclick="testGetConfigs()">List Configs</button>
+                        <button class="btn-secondary" onclick="testGetApiKey()">Get Key</button>
+                        <button class="btn-secondary" onclick="testAddListener()">Add Listener</button>
+                        <button class="btn-secondary" onclick="testTriggerChange()">Trigger Event</button>
+                    </div>
+                    <div id="output-basic" class="output-box" style="margin-top: 0.5rem; display: none;"></div>
+                </div>
+
+                <!-- 测试日志 (左侧显示，方便对照) -->
+                <div class="section" style="flex: 1; display: flex; flex-direction: column;">
+                    <h2>📝 实时日志</h2>
+                    <div id="testLog" class="output-box" style="flex: 1; max-height: none; overflow-y: auto;">
+                        <div class="log-entry"><span class="log-time">System</span><span class="log-info">等待操作...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：配置列表与状态 -->
+            <div class="right-panel">
+                <div class="section">
+                    <h2>📋 API 配置与连接状态</h2>
+                    <div id="unified-api-grid" class="grid-cards">
+                        <!-- 统一的 API 卡片自动生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="constants.js"></script>
+    <script src="storage.js"></script>
+    <script src="config-manager.js"></script>
+
+    <script>
+        // 全局变量
+        let apiConfigs = [];
+        let testStatus = {};
+        let testMessages = {};
+        let testListener = null;
+        let globalOverrideUrl = ''; // 全局 URL 覆盖
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            // 环境隔离：重定向 Storage 键名
+            if (window.BaseAPI && window.BaseAPI.Storage) {
+                console.log('🔧 启用测试环境隔离...');
+                window.BaseAPI.Storage.STORAGE_KEYS.API_CONFIGS = window.BaseAPI.Storage.STORAGE_KEYS.TEST_API_CONFIGS;
+            }
+
+            loadConfigs();
+            updateStatus();
+            renderUnifiedAPIGrid();
+
+            // 填充全局设置输入框
+            const globalKey = BaseAPI.Storage.loadGlobalKey();
+            if (globalKey) {
+                document.getElementById('globalKeyInput').value = globalKey;
+            }
+        });
+
+        // 加载配置
+        function loadConfigs() {
+            apiConfigs = BaseAPI.ConfigManager.getAllConfigs();
+            updateStatus();
+        }
+
+        // 更新状态显示
+        function updateStatus() {
+            const configs = BaseAPI.ConfigManager.getAllConfigs();
+            const globalKey = BaseAPI.Storage.loadGlobalKey();
+
+            const badgesContainer = document.getElementById('status-badges');
+            badgesContainer.innerHTML = `
+                <span class="status-badge status-success">系统就绪</span>
+                <span class="status-badge status-info">配置数: ${configs.length}</span>
+                <span class="status-badge ${globalKey ? 'status-success' : 'status-info'}">
+                    Top Key: ${globalKey ? '已设置' : '未设置'}
+                </span>
+            `;
+        }
+
+        // 全局 URL 变化时触发
+        function onGlobalUrlChange() {
+            globalOverrideUrl = document.getElementById('globalUrlInput').value.trim();
+            renderUnifiedAPIGrid(); // 重新渲染以显示新 URL
+        }
+
+        // 获取实际使用的 URL（优先使用全局覆盖）
+        function getEffectiveUrl(config) {
+            // 如果有全局覆盖 URL 且配置使用的是默认 URL，则使用全局覆盖
+            if (globalOverrideUrl && config.url === BaseAPI.Constants.DEFAULT_BASE_URL) {
+                return globalOverrideUrl;
+            }
+            return config.url;
+        }
+
+        // 渲染统一的 API 配置与状态网格
+        function renderUnifiedAPIGrid() {
+            const grid = document.getElementById('unified-api-grid');
+            const configs = BaseAPI.ConfigManager.getAllConfigs();
+
+            grid.innerHTML = configs.map(config => {
+                // 确定连接状态
+                let statusDotClass = 'dot-gray';
+                let statusText = '未测试';
+                let statusColor = '#6b7280';
+
+                if (testStatus[config.id] === 'success') {
+                    statusDotClass = 'dot-green';
+                    statusText = '✓ 正常';
+                    statusColor = '#059669';
+                } else if (testStatus[config.id] === 'testing') {
+                    statusDotClass = 'dot-yellow';
+                    statusText = '测试中';
+                    statusColor = '#d97706';
+                } else if (testStatus[config.id] === 'failed') {
+                    statusDotClass = 'dot-red';
+                    statusText = '✗ 失败';
+                    statusColor = '#dc2626';
+                }
+
+                return `
+                    <div class="mini-card" style="border-left: 3px solid ${statusColor}; position: relative;">
+                        <!-- 顶部：模型名称和类型 -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3 style="margin: 0; font-size: 0.95rem;">${config.provider}</h3>
+                            <span class="type-badge">${config.type}</span>
+                        </div>
+                        
+                        <!-- 模型ID -->
+                        <p style="font-size: 0.7rem; color: #9ca3af; font-family: monospace; margin-bottom: 0.4rem;">${config.modelName}</p>
+                        
+                        <!-- URL 和 Key 信息 -->
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.5rem; line-height: 1.4;">
+                            <div style="display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.2rem;">
+                                <span style="opacity: 0.6;">🔗</span>
+                                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${getEffectiveUrl(config)}">${getEffectiveUrl(config) || '未配置'}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.3rem;">
+                                <span style="opacity: 0.6;">${config.key ? '🔑' : '🌍'}</span>
+                                <span>${config.key ? '独立 Key' : '全局 Key'}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 连接状态和测试按钮 -->
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #f3f4f6;">
+                            <div style="display: flex; align-items: center; gap: 0.3rem; flex: 1;">
+                                <span class="status-dot ${statusDotClass}"></span>
+                                <span style="font-size: 0.75rem; color: ${statusColor}; font-weight: 500;">${statusText}</span>
+                            </div>
+                            <button class="btn-primary" style="font-size: 0.7rem; padding: 0.25rem 0.6rem; white-space: nowrap;" onclick="testSingleAPI('${config.id}')">测试</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 保留旧函数名作为别名，方便兼容
+        function displayConfigs() {
+            renderUnifiedAPIGrid();
+        }
+
+        function renderAPITestGrid() {
+            renderUnifiedAPIGrid();
+        }
+
+        // 输出日志
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('testLog');
+            // 清除初始文本
+            if (logContainer.children.length === 1 && logContainer.children[0].textContent.includes('等待操作')) {
+                logContainer.innerHTML = '';
+            }
+
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            let colorClass = 'log-info';
+            if (type === 'success') colorClass = 'log-success';
+            if (type === 'error') colorClass = 'log-error';
+
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="${colorClass}">${message}</span>`;
+
+            logContainer.insertBefore(entry, logContainer.firstChild); // 最新日志在最上
+
+            // 也可以可选输出到基础信息框
+            const basicOutput = document.getElementById('output-basic');
+            if (basicOutput.style.display !== 'none') {
+                basicOutput.textContent += `[${time}] ${message}\n`;
+                basicOutput.scrollTop = basicOutput.scrollHeight;
+            }
+        }
+
+        // 测试：获取所有配置
+        function testGetConfigs() {
+            const output = document.getElementById('output-basic');
+            output.style.display = 'block';
+            const configs = BaseAPI.ConfigManager.getAllConfigs();
+            output.textContent = JSON.stringify(configs, null, 2);
+            log(`已列出 ${configs.length} 个配置详情`);
+        }
+
+        // 测试：获取API Key
+        function testGetApiKey() {
+            const output = document.getElementById('output-basic');
+            output.style.display = 'block';
+            const config = apiConfigs[0];
+            if (config) {
+                const key = BaseAPI.ConfigManager.getApiKey(config.id);
+                output.textContent = `Testing with ${config.id}:\nResult Key: ${key}`;
+                log(`获取 ${config.id} Key 成功`);
+            }
+        }
+
+        // 测试：设置全局Key
+        function testSetGlobalKey() {
+            const key = document.getElementById('globalKeyInput').value;
+            if (!key) {
+                log('请输入 API Key', 'error');
+                return;
+            }
+            BaseAPI.Storage.saveGlobalKey(key);
+            log('全局 API Key 保存成功', 'success');
+            updateStatus();
+        }
+
+        // 测试：重置为默认
+        function testResetToDefaults() {
+            if (confirm('确定要重置为默认配置吗？这将覆盖所有自定义设置。')) {
+                // 清除测试用的 localStorage
+                localStorage.removeItem(BaseAPI.Storage.STORAGE_KEYS.TEST_API_CONFIGS);
+                log('已重置为默认配置（从源码加载）', 'success');
+                loadConfigs();
+                renderUnifiedAPIGrid();
+            }
+        }
+
+        // 同步生产配置
+        function syncProductionConfigs() {
+            if (confirm('确定要从主应用（生产环境）同步配置吗？这将覆盖当前测试页面的配置。')) {
+                try {
+                    const prodKey = 'magnes_api_configs';
+                    const prodConfigs = localStorage.getItem(prodKey);
+                    if (prodConfigs) {
+                        localStorage.setItem(BaseAPI.Storage.STORAGE_KEYS.TEST_API_CONFIGS, prodConfigs);
+                        log('✅ 已成功从生产环境同步配置', 'success');
+                        loadConfigs();
+                        renderUnifiedAPIGrid();
+                    } else {
+                        log('未发现生产环境配置数据', 'error');
+                    }
+                } catch (e) {
+                    log('同步失败: ' + e.message, 'error');
+                }
+            }
+        }
+
+        // 测试：添加监听器
+        function testAddListener() {
+            if (testListener) {
+                log('监听器已存在', 'error');
+                return;
+            }
+            testListener = (configs) => {
+                log(`🔔 配置变更监听触发: 当前 ${configs.length} 个配置`, 'success');
+                updateStatus();
+                renderUnifiedAPIGrid();
+            };
+            BaseAPI.ConfigManager.addListener(testListener);
+            log('配置变更监听器已添加', 'success');
+        }
+
+        // 测试：触发配置变更
+        function testTriggerChange() {
+            // 模拟更新一个配置来触发变更
+            const configs = BaseAPI.ConfigManager.getAllConfigs();
+            if (configs.length > 0) {
+                const first = configs[0];
+                // 实际上并没有改数据，只是触发更新流程
+                BaseAPI.ConfigManager.updateConfig(first.id, {});
+                log('手动触发了配置更新事件');
+            }
+        }
+
+        // 测试单个 API
+        async function testSingleAPI(id) {
+            const config = apiConfigs.find(c => c.id === id);
+            if (!config) return;
+
+            testStatus[id] = 'testing';
+            renderUnifiedAPIGrid();
+
+            log(`开始测试 ${config.provider}...`);
+
+            try {
+                const apiKey = config.key || BaseAPI.Storage.loadGlobalKey();
+                if (!apiKey) {
+                    throw new Error('未配置 API Key');
+                }
+
+                // 使用实际有效的 URL（考虑全局覆盖）
+                const baseUrl = getEffectiveUrl(config);
+                const endpoint = `${baseUrl}/v1/models`;
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    testStatus[id] = 'success';
+                    testMessages[id] = '';
+                    log(`${config.provider} 连接成功 (HTTP ${response.status})`, 'success');
+                } else {
+                    let errorDetail = response.statusText;
+                    try {
+                        const errorJson = await response.json();
+                        errorDetail = errorJson.error?.message || errorJson.message || JSON.stringify(errorJson);
+                    } catch (e) { }
+
+                    throw new Error(`HTTP ${response.status} - ${errorDetail}`);
+                }
+            } catch (error) {
+                testStatus[id] = 'failed';
+                let msg = error.message;
+
+                // 优化 Failed to fetch 的解释
+                if (msg === 'Failed to fetch') {
+                    msg = '网络请求受阻 (Failed to fetch)。可能原因：1. 跨域 (CORS) 限制；2. 接口地址无效；3. HTTPS 页面无法请求 HTTP 接口。请检查控制台 (Console) 详情。';
+                }
+
+                testMessages[id] = msg;
+                log(`${config.provider} 失败: ${msg}`, 'error');
+            }
+
+            renderAPITestGrid();
+        }
+
+        // 测试所有 API
+        async function testAllAPIs() {
+            log('🚀 开始批量测试所有 API...');
+            testStatus = {};
+            // 先全部重置为等待状态
+            renderAPITestGrid();
+
+            // 并发控制：每批 3 个，避免拥堵
+            const batchSize = 3;
+            for (let i = 0; i < apiConfigs.length; i += batchSize) {
+                const batch = apiConfigs.slice(i, i + batchSize);
+                await Promise.all(batch.map(config => testSingleAPI(config.id)));
+            }
+
+            log('✅ 批量测试完成', 'success');
+        }
+
+        // 清除缓存
+        function clearStorage() {
+            if (confirm('确定要清除所有本地存储的 API 配置吗？')) {
+                BaseAPI.Storage.clearAll();
+                log('本地缓存已清空', 'success');
+                setTimeout(() => location.reload(), 1000);
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  magnes:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: magnes-studio
+    ports:
+      - "8088:8088"
+    volumes:
+      # 持久化数据目录
+      - ./backend/data:/app/data
+      - ./backend/exports:/app/exports
+      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/storage:/app/storage
+      # 环境变量（可选，也可以直接用 env_file）
+      - ./backend/.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
