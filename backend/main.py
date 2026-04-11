@@ -147,32 +147,14 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Security(secu
 # Hamilton: 解决 CORS (跨域资源共享) 问题
 # 显式允许 file:// 协议产生的 null origin (如果需要支持 file://)
 # 生产环境下应严格限制为前端部署域名
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:8088",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8088"
-    ], 
-    allow_credentials=True, 
-    allow_methods=["*"], 
-    allow_headers=["*"], 
-)
-
-@app.get("/")
-def read_root():
-    print("Ping! 收到前端存活性探测请求")
-    return {"status": "Magnes API is running", "engine": "LangGraph 1.0 (Async)"}
-
-@app.post("/api/v1/design")
-async def create_design_task(request: DesignRequest):
-    """
-    接收用户的设计意图，启动 Designer Agent 任务流。
-    """
     # 构造 LangGraph 的初始状态
+    app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:8088", "http://101.35.231.206", "http://magnes.online", "https://magnes.online", "http://www.magnes.online", "https://www.magnes.online"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    )
     initial_input = {
         "messages": [("user", request.instruction)],
         "instruction": request.instruction,
@@ -227,10 +209,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # 静态资源 (js, css, fonts 等)
+app.mount("/", StaticFiles(directory=os.path.join(backend_dir, "../frontend"), html=True), name="frontend")
+app.mount("/", StaticFiles(directory=os.path.join(backend_dir, "../frontend"), html=True), name="frontend")
 app.mount("/js", StaticFiles(directory=os.path.join(backend_dir, "../frontend/js")), name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(backend_dir, "../frontend/css")), name="css")
 app.mount("/core", StaticFiles(directory=os.path.join(backend_dir, "../frontend/core")), name="core")
-app.mount("/research", StaticFiles(directory=os.path.join(backend_dir, "../frontend/research")), name="research")
+# app.mount("/research", StaticFiles(directory=os.path.join(backend_dir, "../frontend/research")), name="research")
 app.mount("/src", StaticFiles(directory=os.path.join(backend_dir, "../frontend/src")), name="src")
 app.mount("/.well-known", StaticFiles(directory=os.path.join(backend_dir, "../frontend/.well-known")), name="well-known")
 
