@@ -50,3 +50,7 @@ mcp>=0.1.0
 uuid>=1.30
 datasets>=2.14.0
 langgraph-checkpoint-sqlite>=1.0.0
+PyMuPDF>=1.23.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+lxml>=4.9.0
