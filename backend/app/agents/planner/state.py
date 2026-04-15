@@ -29,6 +29,8 @@ class PlannerState(TypedDict):
     active_image_ratio: Annotated[Optional[str], preserve_value]
     # 对话历史摘要 (用于长对话管理)
     conversation_summary: Annotated[Optional[str], preserve_value]
+    # 用户记忆摘要 (Soul.md + preferences)
+    memory_summary: Annotated[Optional[str], preserve_value]
     # 最终业务决策结果
     final_decision: Optional[dict]
     # 最近一次提取或确认的结构化活动内容（用于映射到图片模版）

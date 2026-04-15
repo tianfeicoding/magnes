@@ -15,10 +15,13 @@ from typing import Optional, List, Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.planner import run_planner
 from app.core.users import current_user
 from app.models.user import User
+from app.core.database import get_db
+from app.memory import service as memory_service
 
 router = APIRouter(
     prefix="/dialogue",
@@ -55,7 +58,7 @@ class DialogueRequest(BaseModel):
 
 # ─── SSE 事件生成器 ──────────────────────────────────────────────────────────
 
-async def sse_event_generator(request: DialogueRequest):
+async def sse_event_generator(request: DialogueRequest, db: AsyncSession, user: User):
     """
     将 Planner Agent 的输出包装成 SSE 事件流。
     每个事件格式：data: <json_string>\n\n
@@ -78,6 +81,15 @@ async def sse_event_generator(request: DialogueRequest):
 
         # 注意：不再在这里直接 yield mirror_image，移交给 Planner 的极速路径处理，以确保动作与文字同步
 
+        # 拉取用户记忆摘要并注入对话
+        memory_summary = ""
+        if user:
+            memory_summary = await memory_service.build_memory_summary_for_injection(
+                db=db, user_id=user.id
+            )
+            if memory_summary:
+                print(f"[Dialogue] 🧠 Memory summary injected, length={len(memory_summary)}")
+
         # 流式运行 Planner (接入 LangGraph thread_id)
         # 注意：传给 Planner 的是持久化后的本地 URL，而非 base64
         async for event in run_planner(
@@ -89,6 +101,7 @@ async def sse_event_generator(request: DialogueRequest):
             active_image_url=effective_image_url,  # ✅ 已转换为本地 URL
             active_image_ratio=request.ratio,
             extra_context=request.extraContext,
+            memory_summary=memory_summary,
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             await asyncio.sleep(0)  # 防止事件积压
@@ -105,16 +118,20 @@ async def sse_event_generator(request: DialogueRequest):
 # ─── API 端点 ─────────────────────────────────────────────────────────────────
 
 @router.post("/run")
-async def run_dialogue(request: DialogueRequest):
+async def run_dialogue(
+    request: DialogueRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
     """
     POST /api/v1/dialogue/run
-    
+
     接收用户对话消息，通过 Planner Agent 解析意图，
     以 SSE 流式推送思维链、操作指令和回复文字给前端。
     """
     print(f"\n[Dialogue SSE] 收到新请求: conv_id={request.conversationId}, msg_len={len(request.message if request.message else '')}")
     return StreamingResponse(
-        sse_event_generator(request),
+        sse_event_generator(request, db, user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

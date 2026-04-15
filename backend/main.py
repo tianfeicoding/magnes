@@ -49,6 +49,7 @@ from app.api.export_routes import router as export_router      # [NEW] 图片导
 from app.api.auth import router as auth_router                # [NEW] FastAPI-Users 认证路由
 from app.api.auth_routes import router as config_router        # [NEW] 配置管理路由
 from app.api.painter_routes import router as painter_router    # [NEW] AI 绘图
+from app.memory.routes import router as memory_router          # [NEW] 记忆系统
 from app.core.users import fastapi_users, auth_backend, current_user  # [NEW] FastAPI-Users
 from app.middleware.auth import AuthMiddleware                  # [NEW] 认证中间件
 
@@ -285,13 +286,23 @@ app.include_router(export_router, prefix="/api/v1", dependencies=common_deps)   
 app.include_router(auth_router, prefix="/api/v1")                               # [NEW] FastAPI-Users 认证路由 (自带鉴权)
 app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # [NEW] 配置管理路由
 app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # [NEW] AI 绘图
+app.include_router(memory_router, prefix="/api/v1", dependencies=common_deps)   # [NEW] 记忆系统
 
 # --- 挂载静态文件 (Frontend) ---
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+# 页面路由 - 显式映射 rag.html 和 magnes（必须在根路径 StaticFiles 之前定义）
+@app.get("/rag.html")
+async def serve_rag():
+    return FileResponse(os.path.join(backend_dir, "../frontend/rag.html"))
+
+@app.get("/magnes")
+async def serve_magnes():
+    return FileResponse(os.path.join(backend_dir, "../frontend/index.html"))
+
 # 静态资源 (js, css, fonts 等)
-app.mount("/", StaticFiles(directory=os.path.join(backend_dir, "../frontend"), html=True), name="frontend")
+# 注意：根路径 / 的 html=True 会兜底返回 index.html，但必须在显式路由之后定义，否则它会拦截 /magnes 等路径
 app.mount("/", StaticFiles(directory=os.path.join(backend_dir, "../frontend"), html=True), name="frontend")
 app.mount("/js", StaticFiles(directory=os.path.join(backend_dir, "../frontend/js")), name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(backend_dir, "../frontend/css")), name="css")
@@ -310,16 +321,6 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 agent_dir = os.path.abspath(os.path.join(backend_dir, "../.agent"))
 if os.path.exists(agent_dir):
     app.mount("/skills_assets", StaticFiles(directory=agent_dir), name="skills_assets")
-
-# 页面路由 - 显式映射 rag.html
-@app.get("/rag.html")
-async def serve_rag():
-    return FileResponse(os.path.join(backend_dir, "../frontend/rag.html"))
-
-# 默认首页 (Magnes)
-@app.get("/magnes")
-async def serve_magnes():
-    return FileResponse(os.path.join(backend_dir, "../frontend/index.html"))
 
 if __name__ == "__main__":
     # [官方推荐] 通过 log_config 彻底过滤访问日志

@@ -32,6 +32,7 @@ async def run_planner(
     active_image_url: Optional[str] = None,
     active_image_ratio: Optional[str] = None,
     extra_context: Optional[dict] = None,
+    memory_summary: Optional[str] = None,
     **kwargs
 ) -> AsyncGenerator[dict, None]:
     """流式运行 Planner 接口"""
@@ -116,6 +117,7 @@ async def run_planner(
     if active_image_url: input_data["active_image_url"] = active_image_url
     if active_image_ratio: input_data["active_image_ratio"] = active_image_ratio
     if extra_context: input_data["extra_context"] = extra_context
+    if memory_summary: input_data["memory_summary"] = memory_summary
 
     # PRE-GRAPH FAST PATH
     IMAGE_UPLOAD_KEYWORDS = ["上传了一张图片", "上传了图片", "参考图", "我发了图", "图片上传", "发张图"]

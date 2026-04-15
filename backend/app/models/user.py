@@ -26,3 +26,6 @@ class User(Base):
     # Relationships
     templates = relationship("Template", back_populates="owner")
     histories = relationship("GenerationHistory", back_populates="owner")
+    memories = relationship("UserMemory", back_populates="owner", cascade="all, delete-orphan")
+    conversation_summaries = relationship("ConversationSummary", cascade="all, delete-orphan")
+    canvas_action_logs = relationship("CanvasActionLog", cascade="all, delete-orphan")

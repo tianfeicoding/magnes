@@ -155,6 +155,12 @@ async def call_model(state: PlannerState):
         return fast_decision
 
     system_msg = ROUTER_PROMPT
+
+    # 注入用户记忆摘要 (Soul.md + preferences)
+    memory_summary = state.get("memory_summary", "")
+    if memory_summary:
+        system_msg = f"[用户设定]\n{memory_summary}\n\n---\n\n" + system_msg
+
     if state.get("active_skill"):
          system_msg += f"\n\n🚨当前处于专属技能流 ({state['active_skill']})，请优先识别技能相关意图。"
          
