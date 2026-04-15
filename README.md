@@ -401,11 +401,11 @@ Magnes 的右侧常驻一个 AI 助手面板。你可以用自然语言描述需
 
 ---
 
-### 5. AI 生图与提示词优化
+### 5. 商品图 Skill 与提示词优化
 
-Magnes 内置 AI 生图库和提示词库，支持风格反推和提示词自迭代优化。上传参考图，AI 会自动提取风格 Prompt 并不断迭代优化，直到输出满意的结果。
+Magnes 内置商品图 Skill 和提示词库，支持风格反推和提示词自迭代优化。上传参考图，AI 会自动提取风格 Prompt 并不断迭代优化，直到输出满意的结果。
 
-![AI 生图库](./assets/screenshots/05a-ai-image-generation-library.png)
+![商品图 Skill](./assets/screenshots/05a-ai-image-generation-library.png)
 
 ![AI 提示词库](./assets/screenshots/05b-ai-prompt-library.png)
 
