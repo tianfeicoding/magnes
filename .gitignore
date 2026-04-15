@@ -1,0 +1,119 @@
+# ─── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── 环境变量（绝对不能提交）──────────────────────────────
+backend/.env
+.env
+.env.*
+!backend/.env.example
+
+# ─── 数据库与运行时数据 (本地生成) ────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+chromadb/
+backend/chromadb/
+
+# ─── 用户上传图片 & 导出图片 (运行时生成) ────────────────
+backend/storage/
+storage/
+backend/exports/
+exports/
+
+# ─── 日志与调试产物 ─────────────────────────────────────────
+*.log
+logs/
+backend/curl_*.txt
+backend/test_*.py
+
+# ─── 前端 Babel 编译产物 ──────────────────────────────────
+frontend/js/compiled/
+js/compiled/
+js/src/nodes-compiled/
+js/src/utils-compiled/
+
+# ─── Node.js ──────────────────────────────────────────────
+node_modules/
+# package-lock.json (建议提交以锁定版本)
+npm-debug.log
+yarn-error.log
+
+# ─── macOS ────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+
+# ─── 编辑器 ───────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── 临时文件 ─────────────────────────────────────────────
+*.tmp
+*.bak
+*.orig
+
+# ─── 测试覆盖率 ────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# ─── Playwright 浏览器缓存 ────────────────────────────────
+ms-playwright/
+
+# ─── 开发者临时备份文件 ─────────────────────────────────────
+frontend/index0.html
+frontend/src/app0.js
+
+# ─── 开发研究与文档 ──────────────────────────────────────────
+frontend/research
+prd
+docs/
+
+# ─── Agent Skills (仅保留特定技能) ─────────────────────────
+.agent/skills/*/
+!.agent/skills/ecommerce-image-gen/
+!.agent/skills/openclaw-for-magnes/
+.agent/skills/openclaw-for-magnes/data/
+# 排除其他可能包含敏感数据的技能
+.agent/skills/prompt-optimizer/
+.agent/skills/skill-creator/
+.agent/skills/web-ui-design/
+.agent/skills/xiaohongshu-skills/
+
+# ─── Claude Code 工作目录 ──────────────────────────────────
+.claude/
+
+# ─── 根目录日志文件 ────────────────────────────────────────
+/*.log
+/backend/*.log
+/backend/test_*.py
+/backend/curl_*.txt
+
+# ─── 前端研究/测试文件 ─────────────────────────────────────
+frontend/research/
+frontend/test-*.html
+frontend/js/compiled/test*.html
+frontend/js/compiled/**/test*.html
+frontend/js/compiled/nodes/**/tests/
+
+# ─── 编译产物中的 Source Map ───────────────────────────────
+*.map
+
+# ─── 本地环境配置 ──────────────────────────────────────────
+.env.local
+.env.development
+.env.production
