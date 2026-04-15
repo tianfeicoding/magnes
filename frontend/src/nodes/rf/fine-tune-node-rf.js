@@ -18,15 +18,65 @@
             console.warn(`[FineTuneNode] BaseNode not found during render of ${id}`);
             return null;
         }
-        const [activeLayerIdx, setActiveLayerIdx] = React.useState(0);
-        const [currentPage, setCurrentPage] = React.useState(0); // [Magnes Pagination] 当前页码
-        const itemsPerPage = 3; // 模版默认槽位数
+        // 从 data 中读取持久化状态，如果不存在则使用默认值
+        const [localActiveLayerIdx, setLocalActiveLayerIdx] = React.useState(data.activeLayerIdx || 0);
+        const [localCurrentPage, setLocalCurrentPage] = React.useState(data.currentPage || 0);
+
+        // 同步本地状态与 node data
+        React.useEffect(() => {
+            if (data.activeLayerIdx !== undefined && data.activeLayerIdx !== localActiveLayerIdx) {
+                setLocalActiveLayerIdx(data.activeLayerIdx);
+            }
+        }, [data.activeLayerIdx]);
+
+        React.useEffect(() => {
+            if (data.currentPage !== undefined && data.currentPage !== localCurrentPage) {
+                setLocalCurrentPage(data.currentPage);
+            }
+        }, [data.currentPage]);
+
+        const activeLayerIdx = localActiveLayerIdx;
+        const currentPage = localCurrentPage;
+        const itemsPerPage = data.itemsPerPage || 3;
+
+        // 辅助更新函数：统一更新 node.data 以触发所有联动节点的重绘
+        const updateNodeData = React.useCallback((updates) => {
+            setNodes((nds) => nds.map((node) =>
+                node.id === id ? { ...node, data: { ...node.data, ...updates } } : node
+            ));
+        }, [id, setNodes]);
+
+        const setLayer = (idx) => {
+            // 立即更新本地 state 以触发重新渲染
+            setLocalActiveLayerIdx(idx);
+            // 同时更新 node data 以持久化状态
+            setNodes((nds) => nds.map((node) =>
+                node.id === id ? { ...node, data: { ...node.data, activeLayerIdx: idx } } : node
+            ));
+        };
+        const setPage = (page) => {
+            const newPage = typeof page === 'function' ? page(currentPage) : page;
+            setLocalCurrentPage(newPage);
+            updateNodeData({ currentPage: newPage });
+        };
 
         const [dragState, setDragState] = React.useState(null);
         const [resizingState, setResizingState] = React.useState(null);
         const [guideLines, setGuideLines] = React.useState({ x: [], y: [] });
         const [openDropdown, setOpenDropdown] = React.useState(null);
         const [isExporting, setIsExporting] = React.useState(false);
+        const [editMode, setEditMode] = React.useState('page'); // 'global' | 'page' - 编辑范围模式
+
+        // 历史记录管理 (撤销/重做)
+        const historyStackRef = React.useRef([]);
+        const historyIndexRef = React.useRef(-1);
+        const MAX_HISTORY_SIZE = 50;
+        const isUndoingRef = React.useRef(false); // 防止撤销操作本身被记录
+        const layersRef = React.useRef([]); // 跟踪最新图层状态，初始为空数组
+
+        // 同步 layersRef 与 layers (在 layers 定义后通过 effect 更新)
+
+
 
         const nodes = useNodes();
         const edges = useEdges();
@@ -65,32 +115,201 @@
             }
 
             const LayoutUtils = window.MagnesComponents?.Utils?.Layout;
-            // 只有当上游有有效的 items 数据时才使用 LayoutUtils.mapContentToLayers
-            // 否则直接使用原始布局（如 layout-analyzer 的输出）
             const hasValidItems = upstreamRawData?.items?.length > 0;
+
+            // [Magnes] 获取当前页的独立覆写样式
+            const overrides = data.pageOverrides?.[currentPage]?.layers || null;
+
             if (LayoutUtils && upstreamRawData && !data.isDirty && hasValidItems) {
                 const mappedLayers = LayoutUtils.mapContentToLayers(baseSchema.layers, upstreamRawData, {
                     pageOffset: currentPage,
-                    itemsPerPage: itemsPerPage
+                    itemsPerPage: itemsPerPage,
+                    overrides: overrides // 将单页覆写注入映射工具
                 });
                 return { ...baseSchema, layers: mappedLayers };
             }
-            if (data.isDirty) {
+
+            // 如果是 Dirty 模式且有 overrides，手动进行一层合并渲染
+            if (data.isDirty && overrides) {
+                const mergedLayers = baseSchema.layers.map(l => {
+                    const ov = overrides.find(o => o.id === l.id);
+                    return ov ? { ...l, ...ov } : l;
+                });
+                return { ...baseSchema, layers: mergedLayers };
             }
+
             return baseSchema;
         }, [data.content, data.layoutData, data.isDirty, upstreamContent, upstreamRawData, upstreamRawData?.lastUpdated, currentPage]);
 
         const schema = processedSchema;
         const itemsCount = upstreamRawData?.items?.length || 0;
         const totalPages = Math.max(1, Math.ceil(itemsCount / itemsPerPage));
-
-        // 数据流监控
-        React.useEffect(() => {
-            // 静默监控
-        }, [schema.layers?.length, data.isDirty, id, currentPage, totalPages]);
-
         const layers = schema.layers || [];
         const activeLayer = layers[activeLayerIdx];
+
+        // 同步 layersRef 与 layers (直接在渲染时同步，不使用 effect)
+        layersRef.current = layers;
+
+        // 保存当前状态到历史栈 (传入 layers 避免 TDZ)
+        const saveToHistory = (layersToSave) => {
+            if (isUndoingRef.current) return;
+            if (!layersToSave || layersToSave.length === 0) return;
+
+            if (historyIndexRef.current < historyStackRef.current.length - 1) {
+                historyStackRef.current = historyStackRef.current.slice(0, historyIndexRef.current + 1);
+            }
+
+            // 避免保存重复的历史记录
+            if (historyStackRef.current.length > 0) {
+                const lastState = historyStackRef.current[historyStackRef.current.length - 1];
+                if (JSON.stringify(lastState.layers) === JSON.stringify(layersToSave)) {
+                    return;
+                }
+            }
+
+            const currentState = {
+                layers: JSON.parse(JSON.stringify(layersToSave)),
+                timestamp: Date.now()
+            };
+
+            historyStackRef.current.push(currentState);
+            historyIndexRef.current++;
+
+            if (historyStackRef.current.length > MAX_HISTORY_SIZE) {
+                historyStackRef.current.shift();
+                historyIndexRef.current--;
+            }
+        };
+
+        // 撤销操作
+        const undo = () => {
+            console.log('[FineTune] Undo pressed. History index:', historyIndexRef.current, 'stack size:', historyStackRef.current.length);
+            if (historyIndexRef.current <= 0) {
+                console.log('[FineTune] 没有可撤销的历史');
+                return;
+            }
+
+            isUndoingRef.current = true;
+            historyIndexRef.current--;
+            const previousState = historyStackRef.current[historyIndexRef.current];
+            console.log('[FineTune] Restoring state at index:', historyIndexRef.current, 'layers count:', previousState?.layers?.length);
+
+            // 直接更新本节点的 data，使用 updateNodeData 保持一致性
+            // 创建全新的 content 对象，确保 React 检测到变化
+            const newContent = {
+                ...(data.content || { layers: [] }),
+                layers: JSON.parse(JSON.stringify(previousState.layers))
+            };
+
+            setLocalActiveLayerIdx(0);
+
+            // 合并所有更新到一个 setNodes 调用，防止 React Flow 覆盖状态
+            setNodes((nds) => nds.map((node) =>
+                node.id === id ? {
+                    ...node,
+                    data: {
+                        ...node.data,
+                        isDirty: true,
+                        content: newContent,
+                        activeLayerIdx: 0
+                    }
+                } : node
+            ));
+
+            setTimeout(() => {
+                isUndoingRef.current = false;
+            }, 0);
+
+            console.log('[FineTune] 撤销操作', historyIndexRef.current + 1, '/', historyStackRef.current.length);
+        };
+
+        // 重做操作
+        const redo = () => {
+            if (historyIndexRef.current >= historyStackRef.current.length - 1) {
+                console.log('[FineTune] 没有可重做的历史');
+                return;
+            }
+
+            isUndoingRef.current = true;
+            historyIndexRef.current++;
+            const nextState = historyStackRef.current[historyIndexRef.current];
+
+            // 创建全新的 content 对象，确保 React 检测到变化
+            const newContent = {
+                ...(data.content || { layers: [] }),
+                layers: JSON.parse(JSON.stringify(nextState.layers))
+            };
+            updateNodeData({
+                isDirty: true,
+                content: newContent
+            });
+
+            setTimeout(() => {
+                isUndoingRef.current = false;
+            }, 0);
+
+            console.log('[FineTune] 重做操作', historyIndexRef.current + 1, '/', historyStackRef.current.length);
+        };
+
+        // 键盘事件监听 (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
+        // 使用 ref 存储 undo/redo 函数，避免依赖变化导致重复监听
+        const undoRef = React.useRef(undo);
+        const redoRef = React.useRef(redo);
+        React.useEffect(() => {
+            undoRef.current = undo;
+            redoRef.current = redo;
+        }, [undo, redo]);
+
+        React.useEffect(() => {
+            const handleKeyDown = (e) => {
+                // 只在当前节点被选中时响应 (使用 selected prop)
+                if (!selected) return;
+
+                // 忽略输入框内的撤销
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+                    return;
+                }
+
+                if (e.ctrlKey || e.metaKey) {
+                    if (e.key === 'z' || e.key === 'Z') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (e.shiftKey) {
+                            redoRef.current();
+                        } else {
+                            undoRef.current();
+                        }
+                    } else if (e.key === 'y' || e.key === 'Y') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        redoRef.current();
+                    }
+                }
+            };
+
+            window.addEventListener('keydown', handleKeyDown, { capture: true });
+            return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        }, [id, selected]);
+
+
+        // 初始化历史记录 (必须在 layers 定义后)
+        React.useEffect(() => {
+            if (layers.length > 0 && historyStackRef.current.length === 0) {
+                historyStackRef.current = [{
+                    layers: JSON.parse(JSON.stringify(layers)),
+                    timestamp: Date.now()
+                }];
+                historyIndexRef.current = 0;
+            }
+        }, [layers]);
+
+        // --- 数据对外分发：供属性面板精确读取 ---
+        React.useEffect(() => {
+            if (layers.length > 0) {
+                // 将当前最终渲染使用的图层数据暴露出去，避免属性面板去重复计算
+                updateNodeData({ computedLayers: layers });
+            }
+        }, [layers, updateNodeData]);
 
         // --- 核心逻辑 2.0：自动合并（使用公共工具） ---
         React.useEffect(() => {
@@ -119,6 +338,65 @@
                 } : node
             ));
         }, [id, data.content, data.isParagraphMerged, data.mergeVersion, setNodes]);
+
+        // --- 核心功能：附属属性面板 ---
+        // 属性面板通过外部事件创建，不在组件内部自动创建，避免删除节点时的 Hooks 错误
+
+        // --- 功能：批量导出所有页面 (Batch Export) ---
+        const handleBatchExport = async () => {
+            if (isExporting || totalPages <= 1) return;
+
+            const confirmExport = confirm(`确认批量导出全部 ${totalPages} 页作品吗？\n导出过程中请勿操作，以防生成失败。`);
+            if (!confirmExport) return;
+
+            setIsExporting(true);
+            try {
+                // 确保 html2canvas 已加载
+                if (!window.html2canvas) {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const originalPage = currentPage;
+
+                // 串行循环导出，防止 canvas 内存溢出
+                for (let i = 0; i < totalPages; i++) {
+                    // 1. 切换页面并强制等待渲染
+                    setPage(i);
+                    await new Promise(r => setTimeout(r, 800)); // 等待 800ms 渲染图片
+
+                    const canvasElement = document.querySelector(`.fine-tune-canvas-${id}`);
+                    if (!canvasElement) continue;
+
+                    const canvas = await window.html2canvas(canvasElement, {
+                        useCORS: true,
+                        scale: 2,
+                        backgroundColor: '#ffffff'
+                    });
+
+                    const link = document.createElement('a');
+                    link.download = `Magnes_Batch_P${i + 1}_${Date.now()}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+
+                    console.log(`[FineTune] Exported page ${i + 1}/${totalPages}`);
+                }
+
+                // 恢复原始页码
+                setPage(originalPage);
+                alert(`✅ 批量导出完成！共导出 ${totalPages} 张图片。`);
+            } catch (err) {
+                console.error('[FineTune] Batch Export failed:', err);
+                alert("导出中断：" + err.message);
+            } finally {
+                setIsExporting(false);
+            }
+        };
 
         // 辅助线吸附阈值 (0-1000 坐标系)
         const SNAP_THRESHOLD = 8;
@@ -196,15 +474,22 @@
         };
 
         const handleMouseDown = (e, index) => {
+            e.stopPropagation();
             if (e.button !== 0) return;
-            setActiveLayerIdx(index);
+            setLayer(index);
             setNodes(nds => nds.map(n => n.id === id ? { ...n, selected: true } : n));
+
+            const layer = layers[index];
+            const bbox = layer?.bbox || [0, 0, 100, 100];
+
+            // 拖拽开始前保存当前状态（用于撤销）
+            saveToHistory(layers);
 
             setDragState({
                 index,
                 startX: e.clientX,
                 startY: e.clientY,
-                initialBbox: [...(layers[index].bbox || [0, 0, 0, 0])],
+                initialBbox: Array.isArray(bbox) ? [...bbox] : [bbox.x || 0, bbox.y || 0, bbox.width || 100, bbox.height || 100],
             });
         };
 
@@ -225,16 +510,43 @@
 
             const handleMouseMove = (e) => {
                 if (dragState) {
-                    const dx = (e.clientX - dragState.startX) / (300 / 1000); // 这里的 300 需要根据实际画布宽度校准
-                    const dy = (e.clientY - dragState.startY) / (400 / 1000);
+                    const canvasEl = document.querySelector(`.fine-tune-canvas-${id}`);
+                    const canvasRect = canvasEl?.getBoundingClientRect();
+                    const scaleX = canvasRect ? 1000 / canvasRect.width : 1000 / 300;
+                    const scaleY = canvasRect ? 1000 / canvasRect.height : 1000 / 400;
+
+                    const dx = (e.clientX - dragState.startX) * scaleX;
+                    const dy = (e.clientY - dragState.startY) * scaleY;
 
                     const rawBbox = [...dragState.initialBbox];
                     rawBbox[0] = Math.max(0, Math.min(1000, Math.round(dragState.initialBbox[0] + dx)));
                     rawBbox[1] = Math.max(0, Math.min(1000, Math.round(dragState.initialBbox[1] + dy)));
 
+                    console.log('[FineTune] Dragging:', dragState.index, 'dx:', dx, 'dy:', dy, 'new pos:', [rawBbox[0], rawBbox[1]]);
+
                     const { snappedBbox, lines } = calculateSnapping(rawBbox, dragState.index);
                     setGuideLines(lines);
-                    updateLayerData(dragState.index, { bbox: snappedBbox });
+                    // 直接使用 setNodes 避免闭包问题
+                    setNodes((nds) => nds.map((node) => {
+                        if (node.id !== id) return node;
+                        const currentLayers = node.data.isDirty ? (node.data.content?.layers || layers) : layers;
+                        const newLayers = [...currentLayers];
+                        if (newLayers[dragState.index]) {
+                            newLayers[dragState.index] = { ...newLayers[dragState.index], bbox: snappedBbox };
+                        }
+                        // 同步更新 layersRef
+                        layersRef.current = newLayers;
+                        return {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                isDirty: true,
+                                isParagraphMerged: true,
+                                mergeVersion: 4,
+                                content: { ...(node.data.content || schema), layers: newLayers }
+                            }
+                        };
+                    }));
                 } else if (resizingState) {
                     const dx = (e.clientX - resizingState.startX) / (300 / 1000);
                     const dy = (e.clientY - resizingState.startY) / (400 / 1000);
@@ -255,11 +567,40 @@
                         nh = ih - moveY;
                     }
 
-                    updateLayerData(resizingState.index, { bbox: [Math.round(nx), Math.round(ny), Math.round(nw), Math.round(nh)] });
+                    // 直接使用 setNodes 避免闭包问题
+                    const resizedBbox = [Math.round(nx), Math.round(ny), Math.round(nw), Math.round(nh)];
+                    setNodes((nds) => nds.map((node) => {
+                        if (node.id !== id) return node;
+                        const currentLayers = node.data.isDirty ? (node.data.content?.layers || layers) : layers;
+                        const newLayers = [...currentLayers];
+                        if (newLayers[resizingState.index]) {
+                            newLayers[resizingState.index] = { ...newLayers[resizingState.index], bbox: resizedBbox };
+                        }
+                        // 同步更新 layersRef
+                        layersRef.current = newLayers;
+                        return {
+                            ...node,
+                            data: {
+                                ...node.data,
+                                isDirty: true,
+                                isParagraphMerged: true,
+                                mergeVersion: 4,
+                                content: { ...(node.data.content || schema), layers: newLayers }
+                            }
+                        };
+                    }));
                 }
             };
 
             const handleMouseUp = () => {
+                // 如果是拖拽或缩放结束，保存最终状态到历史
+                const wasDragging = dragState || resizingState;
+                if (wasDragging && !isUndoingRef.current) {
+                    // 使用 layersRef 获取最新的图层状态
+                    console.log('[FineTune] Drag ended, saving to history. layers count:', layersRef.current?.length);
+                    saveToHistory(layersRef.current);
+                    console.log('[FineTune] History stack size:', historyStackRef.current.length, 'index:', historyIndexRef.current);
+                }
                 setDragState(null);
                 setResizingState(null);
                 setGuideLines({ x: [], y: [] });
@@ -281,6 +622,9 @@
             if (updates.style) {
                 newLayers[index].style = { ...layers[index].style, ...updates.style };
             }
+
+            // 保存历史记录 (在修改后)
+            saveToHistory(newLayers);
 
             setNodes((nds) => nds.map((node) =>
                 node.id === id ? {
@@ -329,8 +673,11 @@
 
                 const updatedLayers = [...currentLayers, newLayer];
 
+                // 保存历史记录 (在修改后)
+                saveToHistory(updatedLayers);
+
                 // 延迟一帧设置选中态，确保索引正确
-                setTimeout(() => setActiveLayerIdx(updatedLayers.length - 1), 50);
+                setTimeout(() => setLayer(updatedLayers.length - 1), 50);
 
                 return {
                     ...n,
@@ -451,7 +798,7 @@
         const ResizeHandles = ({ index, bbox }) => {
             const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
             return handles.map(h => {
-                let style = { position: 'absolute', width: '8px', height: '8px', backgroundColor: '#fff', border: '1px solid #3b82f6', zIndex: 100 };
+                let style = { position: 'absolute', width: '8px', height: '8px', backgroundColor: '#fff', border: '1.5px solid #000', zIndex: 100 };
                 if (h.includes('n')) style.top = '-4px';
                 if (h.includes('s')) style.bottom = '-4px';
                 if (h.includes('w')) style.left = '-4px';
@@ -471,492 +818,714 @@
             });
         };
 
+        // 属性面板状态
+        const [mode, setMode] = React.useState('global');
+        const [showGenPanel, setShowGenPanel] = React.useState(false);
+        const [genPrompt, setGenPrompt] = React.useState('');
+        const [isGenerating, setIsGenerating] = React.useState(false);
+        const [useReferenceImage, setUseReferenceImage] = React.useState(false);
+        const fileInputRef = React.useRef(null);
+
+        // 获取背景图URL
+        const currentBgUrl = layers.find(l =>
+            l.role?.includes('background') ||
+            l.role?.includes('reference') ||
+            l.id?.includes('background') ||
+            l.type === 'background' ||
+            l.isPlaceholder
+        )?.url || '';
+
+        // 处理本地上传
+        const handleLocalUpload = (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const url = ev.target.result;
+                const bgLayerIdx = layers.findIndex(l =>
+                    l.role?.includes('background') ||
+                    l.role?.includes('reference') ||
+                    l.id?.includes('background') ||
+                    l.type === 'background'
+                );
+
+                if (bgLayerIdx >= 0) {
+                    updateLayerData(bgLayerIdx, { url, type: 'background', role: 'background' });
+                } else {
+                    const newLayers = [...layers];
+                    newLayers.push({
+                        id: `background-${Date.now()}`,
+                        type: 'background',
+                        role: 'background',
+                        url: url,
+                        bbox: [0, 0, 1000, 1000],
+                        z_index: 0
+                    });
+                    // 保存历史记录
+                    saveToHistory(newLayers);
+                    setNodes(nds => nds.map(n => n.id === id ? {
+                        ...n, data: { ...n.data, isDirty: true, content: { ...schema, layers: newLayers } }
+                    } : n));
+                }
+            };
+            reader.readAsDataURL(file);
+        };
+
+        // 打开侧边栏素材库
+        const openSidebarAssets = () => {
+            const bgLayer = layers.find(l =>
+                l.role?.includes('background') ||
+                l.role?.includes('reference') ||
+                l.id?.includes('background') ||
+                l.type === 'background' ||
+                l.isPlaceholder
+            );
+
+            if (!bgLayer) {
+                window.dispatchEvent(new CustomEvent('magnes:show_toast', {
+                    detail: { message: '请先添加背景图层', type: 'warning' }
+                }));
+                return;
+            }
+
+            window.dispatchEvent(new CustomEvent('magnes:switch_ext_tab', {
+                detail: {
+                    tab: 'assets',
+                    context: {
+                        targetNodeId: id,
+                        targetLayerId: bgLayer.id
+                    }
+                }
+            }));
+        };
+
+        // AI背景生成
+        const handleAIBackground = async () => {
+            if (!genPrompt) return;
+            setIsGenerating(true);
+            try {
+                const API = window.MagnesComponents?.Utils?.API;
+                const payload = {
+                    prompt: genPrompt,
+                    aspect_ratio: '3:4',
+                    reference_image: useReferenceImage ? currentBgUrl : null,
+                    reference_mode: useReferenceImage ? 'img2img' : 'txt2img'
+                };
+                const resp = await API.magnesFetch('/painter/generate/background', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+
+                if (resp.ok) {
+                    const result = await resp.json();
+                    const bgLayerIdx = layers.findIndex(l =>
+                        l.role?.includes('background') ||
+                        l.role?.includes('reference') ||
+                        l.id?.includes('background') ||
+                        l.type === 'background'
+                    );
+
+                    if (bgLayerIdx >= 0) {
+                        updateLayerData(bgLayerIdx, { url: result.url, type: 'background', role: 'background' });
+                    } else {
+                        const newLayers = [...layers];
+                        newLayers.push({
+                            id: `background-${Date.now()}`,
+                            type: 'background',
+                            role: 'background',
+                            url: result.url,
+                            bbox: [0, 0, 1000, 1000],
+                            z_index: 0
+                        });
+                        // 保存历史记录
+                        saveToHistory(newLayers);
+                        setNodes(nds => nds.map(n => n.id === id ? {
+                            ...n, data: { ...n.data, isDirty: true, content: { ...schema, layers: newLayers } }
+                        } : n));
+                    }
+                    setShowGenPanel(false);
+                }
+            } catch (err) {
+                console.error('[FineTune] AI背景生成失败:', err);
+                alert('生成失败：' + err.message);
+            } finally {
+                setIsGenerating(false);
+            }
+        };
+
         return (
             <BaseNode
                 id={id}
                 title="精细编辑"
                 icon={Sliders}
                 selected={selected}
-                style={{ width: '380px' }}
-                headerExtra={
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={exportCurrentImage}
-                            disabled={isExporting}
-                            className={`flex items-center gap-1 px-2 py-0.5 border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white ${isExporting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <ExternalLink size={10} />
-                            {isExporting ? '导出中...' : '保存图片'}
-                        </button>
-                        <button
-                            onClick={handleSaveTemplate}
-                            className="flex items-center gap-1 px-2 py-0.5 border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white"
-                        >
-                            <Copy size={10} />
-                            保存模版
-                        </button>
-                    </div>
-                }
+                style={{ width: '700px' }}
+                headerExtra={null}
                 handles={{
                     target: [{ id: 'input', top: '50%' }],
                     source: [{ id: 'output', top: '50%' }]
                 }}
             >
-                <div className="flex flex-col gap-4">
-                    {/* 1. WYSIWYG 画布区域 */}
-                    {/* 动态宽高比适配：从 schema.canvas 获取比例，防止硬编码 3:4 导致变形 */}
-                    <div
-                        className={`relative w-full bg-zinc-50 border border-black overflow-hidden group nodrag fine-tune-canvas-${id}`}
-                        style={{
-                            aspectRatio: (schema.canvas?.width && schema.canvas?.height)
-                                ? `${schema.canvas.width} / ${schema.canvas.height}`
-                                : '3 / 4'
-                        }}
-                    >
-                        {/* 辅助线 Overlay */}
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none z-[2000]">
-                            {guideLines.x.map((lx, i) => (
-                                <line key={`x-${i}`} x1={`${lx / 10}%`} y1="0" x2={`${lx / 10}%`} y2="100%" stroke="#FF2442" strokeWidth="1" strokeDasharray="4 2" />
-                            ))}
-                            {guideLines.y.map((ly, i) => (
-                                <line key={`y-${i}`} x1="0" y1={`${ly / 10}%`} x2="100%" y2={`${ly / 10}%`} stroke="#FF2442" strokeWidth="1" strokeDasharray="4 2" />
-                            ))}
-                        </svg>
+                <div className="flex gap-4">
+                    {/* 左侧：画布区域 */}
+                    <div className="flex flex-col gap-4" style={{ width: '380px' }}>
+                        {/* 1. WYSIWYG 画布区域 */}
+                        {/* 动态宽高比适配：从 schema.canvas 获取比例，防止硬编码 3:4 导致变形 */}
+                        <div
+                            className={`relative w-full bg-zinc-50 border border-black overflow-hidden group nodrag fine-tune-canvas-${id}`}
+                            style={{
+                                aspectRatio: (schema.canvas?.width && schema.canvas?.height)
+                                    ? `${schema.canvas.width} / ${schema.canvas.height}`
+                                    : '3 / 4'
+                            }}
+                        >
+                            {/* 辅助线 Overlay */}
+                            <svg className="absolute inset-0 w-full h-full pointer-events-none z-[2000]">
+                                {guideLines.x.map((lx, i) => (
+                                    <line key={`x-${i}`} x1={`${lx / 10}%`} y1="0" x2={`${lx / 10}%`} y2="100%" stroke="#000000" strokeWidth="1" strokeDasharray="4 2" />
+                                ))}
+                                {guideLines.y.map((ly, i) => (
+                                    <line key={`y-${i}`} x1="0" y1={`${ly / 10}%`} x2="100%" y2={`${ly / 10}%`} stroke="#000000" strokeWidth="1" strokeDasharray="4 2" />
+                                ))}
+                            </svg>
 
-                        {layers.length > 0 ? (
-                            layers.map((layer, idx) => {
-                                const isActive = activeLayerIdx === idx;
-                                const isText = layer.type === 'text';
+                            {layers.length > 0 ? (
+                                layers.map((layer, idx) => {
+                                    const isActive = activeLayerIdx === idx;
+                                    const isText = layer.type === 'text';
 
-                                // 增强 BBox 解析：兼容对象格式 {x, y, width, height}
-                                let bbox = layer.bbox || [0, 0, 0, 0];
-                                if (!Array.isArray(bbox) && typeof bbox === 'object') {
-                                    bbox = [
-                                        bbox.x || 0,
-                                        bbox.y || 0,
-                                        bbox.width || bbox.w || 0,
-                                        bbox.height || bbox.h || 0
-                                    ];
-                                }
-                                const [x, y, w, h] = bbox;
+                                    // 增强 BBox 解析：兼容对象格式 {x, y, width, height}
+                                    let bbox = layer.bbox || [0, 0, 0, 0];
+                                    if (!Array.isArray(bbox) && typeof bbox === 'object') {
+                                        bbox = [
+                                            bbox.x || 0,
+                                            bbox.y || 0,
+                                            bbox.width || bbox.w || 0,
+                                            bbox.height || bbox.h || 0
+                                        ];
+                                    }
+                                    const [x, y, w, h] = bbox;
 
-                                // 更加鲁棒的背景判定：ID或Role中包含 background 关键词即可
-                                const isBackground =
-                                    layer.role?.includes('background') ||
-                                    layer.role?.includes('reference') ||
-                                    layer.id?.includes('background') ||
-                                    layer.type === 'background';
+                                    // 更加鲁棒的背景判定：ID或Role中包含 background 关键词即可
+                                    const isBackground =
+                                        layer.role?.includes('background') ||
+                                        layer.role?.includes('reference') ||
+                                        layer.id?.includes('background') ||
+                                        layer.type === 'background';
 
-                                const isPlaceholder = layer.isPlaceholder || layer.role === 'placeholder_image' || layer.type === 'placeholder_image';
+                                    const isPlaceholder = layer.isPlaceholder || layer.role === 'placeholder_image' || layer.type === 'placeholder_image';
 
-                                const style = {
-                                    position: 'absolute',
-                                    left: isBackground ? '0' : `${x / 10}%`,
-                                    top: isBackground ? '0' : `${y / 10}%`,
-                                    width: isBackground ? '100%' : `${(w / 10) * (layer.isLayoutAnalyst ? 1.2 : 1)}%`,
-                                    height: isBackground ? '100%' : `${h / 10}%`,
-                                    zIndex: (layer.z_index || 0) + idx,
-                                    cursor: isBackground ? 'default' : (dragState ? 'grabbing' : 'grab'),
-                                    outline: isActive && !isBackground ? '1.5px solid #3b82f6' : 'none',
-                                    padding: isText ? '4px' : '0',
-                                    display: ((layer.isHidden ?? false) || (layer.opacity ?? 1) === 0) ? 'none' : 'block'
-                                };
-
-                                // Diagnostic: check first text layer values
-                                if (isText && idx === 0) {
-                                }
-
-                                if (isText) {
-                                    const textStyle = layer.style || {};
-                                    const fontScaleFactor = 0.443;
-                                    const displayFontSize = (parseInt(textStyle.fontSize) || 40) * fontScaleFactor;
-
-                                    return (
-                                        <div
-                                            key={layer.id || `layer-${idx}`}
-                                            onMouseDown={(e) => isBackground ? null : handleMouseDown(e, idx)}
-                                            onKeyDown={(e) => {
-                                                if (e.currentTarget.contentEditable === 'true') {
-                                                    const keys = ['Backspace', 'Delete', 'Enter', ' '];
-                                                    if (keys.includes(e.key)) e.stopPropagation();
-                                                }
-                                            }}
-                                            onDoubleClick={(e) => {
-                                                if (isBackground) return;
-                                                e.stopPropagation();
-                                                e.currentTarget.contentEditable = true;
-                                                e.currentTarget.focus();
-                                            }}
-                                            onBlur={(e) => {
-                                                e.currentTarget.contentEditable = false;
-                                                updateLayerData(idx, { content: e.currentTarget.innerText, text: e.currentTarget.innerText });
-                                            }}
-                                            className="transition-shadow text-black outline-none"
-                                            style={{
-                                                ...style,
-                                                fontSize: `${displayFontSize}px`,
-                                                color: textStyle.color || '#000',
-                                                textAlign: textStyle.textAlign || 'center',
-                                                fontWeight: textStyle.fontWeight || 'bold',
-                                                fontFamily: 'PingFang SC, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif',
-                                                whiteSpace: 'pre-wrap', // 允许换行
-                                                wordBreak: 'break-word',
-                                                lineHeight: '1.4',
-                                                userSelect: 'text',
-                                                overflow: 'visible'
-                                            }}
-                                        >
-                                            {layer.content || layer.text || (isActive ? '输入内容...' : '')}
-                                            {isActive && !isBackground && <ResizeHandles index={idx} bbox={bbox} />}
-                                        </div>
-                                    );
-                                } else {
-
-                                    return (
-                                        <div
-                                            key={layer.id || `layer-${idx}`}
-                                            onMouseDown={(e) => isBackground ? null : handleMouseDown(e, idx)}
-                                            style={style}
-                                        >
-                                            {layer.url ? (
-                                                <img
-                                                    src={layer.url.startsWith('/uploads') ? `http://localhost:8088${layer.url}` : layer.url}
-                                                    className={`w-full h-full pointer-events-none ${isBackground ? 'object-cover' : 'object-contain'}`}
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full border border-dashed border-black/20 flex flex-col items-center justify-center bg-zinc-50/50">
-                                                    <ImageIcon size={20} className="text-zinc-300" />
-                                                    <span className="text-[9px] font-bold text-zinc-400 mt-1">
-                                                        {isPlaceholder ? '展示位' : '空图片'}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {isActive && !isBackground && <ResizeHandles index={idx} bbox={bbox} />}
-                                        </div>
-                                    );
-                                }
-                            })
-                        ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center font-black">
-                                <Sliders size={32} strokeWidth={1} className="text-zinc-500" />
-                                <span className="text-[12px] uppercase tracking-widest text-zinc-500">
-                                    等待输入数据
-                                </span>
-                            </div>
-                        )}
-
-                        {/* 独立浮动工具栏 */}
-                        {selected && activeLayerIdx !== null && layers[activeLayerIdx] && layers[activeLayerIdx].type === 'text' && !dragState && !resizingState && (
-                            (() => {
-                                const layer = layers[activeLayerIdx];
-                                const [lx, ly, lw, lh] = layer.bbox || [0, 0, 0, 0];
-                                const textStyle = layer.style || {};
-                                const py = ly / 10;
-                                const ph = lh / 10;
-                                const isOnBottom = py > 40;
-                                const toolTop = isOnBottom ? Math.max(5, py - 12) : Math.min(85, py + ph + 2);
-
-                                return (
-                                    <div className="absolute left-0 right-0 z-[3000] flex justify-center pointer-events-none" style={{ top: `${toolTop}%` }}>
-                                        <div className="flex items-center bg-white border border-black h-8 px-1 pointer-events-auto -space-x-[1px]" onMouseDown={e => e.stopPropagation()}>
-                                            {/* Font */}
-                                            <div className="relative h-full flex items-center">
-                                                <button className="px-2 text-[10px] font-black hover:bg-zinc-100 h-full flex items-center gap-1 min-w-[70px] uppercase tracking-tighter" onClick={() => setOpenDropdown(openDropdown === 'font' ? null : 'font')}>
-                                                    {textStyle.fontFamily?.split(' ')[0] || 'PingFang'}
-                                                    <div className="border-t-[3px] border-t-black border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent ml-1"></div>
-                                                </button>
-                                                {openDropdown === 'font' && (
-                                                    <div className="absolute top-full left-0 mt-[1px] bg-white border border-black z-[4000] w-24 py-1">
-                                                        {['PingFang SC', 'JetBrains Mono', 'Outfit'].map(f => (
-                                                            <button key={f} className="w-full text-left px-2 py-1.5 text-[10px] font-bold hover:bg-black hover:text-white" onClick={() => { updateLayerData(activeLayerIdx, { style: { fontFamily: f } }); setOpenDropdown(null); }}>
-                                                                {f.split(' ')[0]}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="w-[1px] h-4 bg-black/15 mx-1"></div>
-                                            {/* Size Stepper: + 数字 - */}
-                                            <div className="flex items-center h-full group/stepper">
-                                                <button
-                                                    className="w-8 h-full flex items-center justify-center hover:bg-black hover:text-white transition-colors text-[12px] font-black"
-                                                    onClick={() => {
-                                                        const current = parseInt(textStyle.fontSize) || 40;
-                                                        updateLayerData(activeLayerIdx, { style: { fontSize: current + 2 } });
-                                                    }}
-                                                >
-                                                    +
-                                                </button>
-                                                <div className="px-1 text-[10px] font-black min-w-[32px] text-center flex items-center justify-center h-full border-x border-black/5">
-                                                    {textStyle.fontSize || 40}
-                                                </div>
-                                                <button
-                                                    className="w-8 h-full flex items-center justify-center hover:bg-black hover:text-white transition-colors text-[12px] font-black"
-                                                    onClick={() => {
-                                                        const current = parseInt(textStyle.fontSize) || 40;
-                                                        updateLayerData(activeLayerIdx, { style: { fontSize: Math.max(8, current - 2) } });
-                                                    }}
-                                                >
-                                                    -
-                                                </button>
-                                            </div>
-                                            <div className="w-[1px] h-4 bg-black/15 mx-1"></div>
-                                            {/* Bold */}
-                                            <button className={`w-8 h-full flex items-center justify-center hover:bg-zinc-100 text-black ${textStyle.fontWeight === 'black' || textStyle.fontWeight === 'bold' ? 'bg-zinc-100' : ''}`} onClick={() => { const newWeight = (textStyle.fontWeight === 'black' || textStyle.fontWeight === 'bold') ? 'normal' : 'black'; updateLayerData(activeLayerIdx, { style: { fontWeight: newWeight } }); }}>
-                                                <span className="text-[10px] font-black">B</span>
-                                            </button>
-                                            <div className="w-[1px] h-4 bg-black/15 mx-1"></div>
-                                            {/* Color */}
-                                            <div className="w-8 h-full flex items-center justify-center relative">
-                                                <input type="color" className="absolute inset-0 opacity-0 cursor-pointer" value={textStyle.color || '#000000'} onChange={(e) => updateLayerData(activeLayerIdx, { style: { color: e.target.value } })} />
-                                                <div className="w-4 h-4 border border-black/20" style={{ backgroundColor: textStyle.color || '#000' }}></div>
-                                            </div>
-                                            <div className="w-[1px] h-4 bg-black/15 mx-1"></div>
-                                            {/* Delete */}
-                                            <button className="w-8 h-full flex items-center justify-center hover:bg-red-50 text-black hover:text-red-600" onClick={() => {
-                                                const newLayers = layers.filter((_, i) => i !== activeLayerIdx);
-                                                setNodes((nds) => nds.map((node) => node.id === id ? {
-                                                    ...node,
-                                                    data: {
-                                                        ...node.data,
-                                                        isDirty: true, //标记脏数据，防止被上游覆盖
-                                                        content: { ...schema, layers: newLayers }
-                                                    }
-                                                } : node));
-                                                setActiveLayerIdx(0);
-                                            }}>
-                                                <Trash size={12} strokeWidth={2.5} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })()
-                        )}
-                    </div>
-                    {/* 分页导航控制廊 */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between bg-white text-black px-2 py-1.5 -mt-px border border-black nodrag">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setCurrentPage(prev => Math.max(0, prev - 1)); }}
-                                disabled={currentPage === 0}
-                                className={`p-1 hover:bg-zinc-100 disabled:opacity-30`}
-                            >
-                                <ChevronDown size={16} strokeWidth={3} className="rotate-90" />
-                            </button>
-                            <div className="flex flex-col items-center">
-                                <span className="text-[12px] font-black tabular-nums tracking-widest">{currentPage + 1} / {totalPages}</span>
-                            </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setCurrentPage(prev => Math.min(totalPages - 1, prev + 1)); }}
-                                disabled={currentPage === totalPages - 1}
-                                className={`p-1 hover:bg-zinc-100 disabled:opacity-30`}
-                            >
-                                <ChevronDown size={16} strokeWidth={3} className="-rotate-90" />
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col gap-4">
-                        {/* 活动组 (Group) 聚合展示层 - 用户请求隐藏 */}
-                        {/* <div className="flex flex-col gap-2">
-                            <div className="flex items-center justify-between border-b border-black pb-1">
-                                <span className="text-[10px] font-black text-black uppercase tracking-widest">语义组化浏览 (Group View)</span>
-                            </div>
-
-                            <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                                {(() => {
-                                    // 1. 自动对图层进行分组
-                                    const groups = {};
-                                    layers.forEach((l, idx) => {
-                                        const gid = l.groupId || 'group_none';
-                                        if (!groups[gid]) groups[gid] = { id: gid, items: [] };
-                                        groups[gid].items.push({ ...l, originalIdx: idx });
-                                    });
-
-                                    // 2. 角色映射表
-                                    const ROLE_LABELS = {
-                                        title: '标题', venue: '地点', date: '日期', price: '价格',
-                                        description: '文案', highlights: '亮点', time_indicator: '时间段', other: '辅助'
+                                    const style = {
+                                        position: 'absolute',
+                                        left: isBackground ? '0' : `${x / 10}%`,
+                                        top: isBackground ? '0' : `${y / 10}%`,
+                                        width: isBackground ? '100%' : (isText && w === 0 ? 'max-content' : `${(w / 10) * (layer.isLayoutAnalyst ? 1.2 : 1)}%`),
+                                        height: isBackground ? '100%' : (isText && h === 0 ? 'max-content' : `${h / 10}%`),
+                                        minWidth: isText ? '20px' : '0',
+                                        minHeight: isText ? '20px' : '0',
+                                        zIndex: isText ? 1000 + idx : ((layer.z_index || 0) + idx),
+                                        cursor: isBackground ? 'default' : (dragState ? 'grabbing' : 'grab'),
+                                        pointerEvents: isBackground ? 'none' : 'auto', // 防止全屏背景阻挡下层原本更高的 DOM 响应
+                                        boxShadow: isActive && !isBackground ? 'inset 0 0 0 1px #000' : 'none',
+                                        padding: isText ? '2px' : '0',
+                                        display: ((layer.isHidden ?? false) || (layer.opacity ?? 1) === 0) ? 'none' : 'block'
                                     };
 
-                                    // 3. 渲染分组列表
-                                    return Object.values(groups).sort((a, b) => {
-                                        if (a.id === 'group_none') return -1;
-                                        return a.id.localeCompare(b.id);
-                                    }).map(group => (
-                                        <div key={group.id} className="flex flex-col border border-black/5 bg-zinc-50/30">
-                                            <div className="px-2 py-1 bg-zinc-100/50 flex items-center justify-between border-b border-black/5">
-                                                <span className="text-[9px] font-black text-black/60 uppercase tracking-widest">
-                                                    {group.id === 'group_none' ? '✦ 全局/独立图层' : `◆ 活动项 ${group.id.split('_')[1]}`}
-                                                </span>
-                                            </div>
-                                            <div className="flex flex-col">
-                                                {group.items.map(item => {
-                                                    const isActive = activeLayerIdx === item.originalIdx;
-                                                    const isLocked = item.role === 'background';
-                                                    const label = ROLE_LABELS[item.semanticRole] || item.semanticRole || (item.type === 'text' ? '文本' : '图片');
+                                    if (isText) {
+                                        const textStyle = layer.style || {};
+                                        const fontScaleFactor = 0.443;
+                                        const displayFontSize = (parseInt(textStyle.fontSize) || 40) * fontScaleFactor;
 
-                                                    return (
-                                                        <div
-                                                            key={item.originalIdx}
+                                        return (
+                                            <React.Fragment key={layer.id || `layer-${idx}`}>
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        console.log('[FineTune] Clicked layer:', idx, 'current active:', activeLayerIdx);
+                                                        setLayer(idx);
+                                                        setNodes(nds => nds.map(n => n.id === id ? { ...n, selected: true } : n));
+                                                    }}
+                                                    onPointerDown={(e) => {
+                                                        e.stopPropagation();
+                                                        handleMouseDown(e, idx);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.currentTarget.contentEditable === 'true') {
+                                                            const keys = ['Backspace', 'Delete', 'Enter', ' '];
+                                                            if (keys.includes(e.key)) e.stopPropagation();
+                                                        }
+                                                    }}
+                                                    onDoubleClick={(e) => {
+                                                        if (isBackground) return;
+                                                        e.stopPropagation();
+                                                        e.currentTarget.contentEditable = true;
+                                                        e.currentTarget.focus();
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        e.currentTarget.contentEditable = false;
+                                                        updateLayerData(idx, { content: e.currentTarget.innerText, text: e.currentTarget.innerText });
+                                                    }}
+                                                    className="text-black"
+                                                    style={{
+                                                        ...style,
+                                                        fontSize: `${displayFontSize}px`,
+                                                        color: textStyle.color || '#000',
+                                                        textAlign: textStyle.textAlign || 'center',
+                                                        fontWeight: textStyle.fontWeight || 'bold',
+                                                        fontFamily: textStyle.fontFamily || 'PingFang SC, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif',
+                                                        whiteSpace: 'pre-wrap', // 允许换行
+                                                        wordBreak: 'break-word',
+                                                        lineHeight: '1.4',
+                                                        userSelect: 'none',
+                                                        overflow: 'visible'
+                                                    }}
+                                                >
+                                                    {layer.content || layer.text || (isActive ? '输入内容...' : '')}
+                                                </div>
+
+                                                {/* 选中时显示复制/删除按钮（脱离 contentEditable DOM 结构） */}
+                                                {isActive && !isBackground && (
+                                                    <div
+                                                        className="absolute flex gap-1"
+                                                        style={{
+                                                            left: style.left,
+                                                            top: `calc(${style.top} - 32px)`,
+                                                            zIndex: 2005
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onPointerDown={(e) => e.stopPropagation()}
+                                                    >
+                                                        <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                setActiveLayerIdx(item.originalIdx);
-                                                            }}
-                                                            className={`
-                                                                flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border-l-2
-                                                                ${isActive ? 'bg-black text-white border-black' : 'hover:bg-zinc-100 text-black border-transparent'}
-                                                                ${isLocked ? 'opacity-50' : ''}
-                                                            `}
-                                                        >
-                                                            <div className="flex flex-col min-w-0 flex-1">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className={`text-[9px] font-black px-1 ${isActive ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                                                                        {label}
-                                                                    </span>
-                                                                    <span className="text-[11px] font-bold truncate">
-                                                                        {item.text || item.content || (item.type === 'image' ? '[图片图层]' : '未命名')}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            {isActive && <div className="ml-auto w-1 h-1 bg-white rounded-full scale-110" />}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </div> */}
+                                                                const newLayer = {
+                                                                    ...layer,
+                                                                    id: `text-${Date.now()}`,
+                                                                    bbox: [x + 20, y + 20, w, h]
+                                                                };
+                                                                const newLayers = [...layers, newLayer];
+                                                                // 保存历史记录
+                                                                saveToHistory(newLayers);
 
-                        <div className="flex flex-col gap-3">
-                            {/* 添加图层快捷控制 */}
+                                                                const newIdx = newLayers.length - 1;
+                                                                setLocalActiveLayerIdx(newIdx);
+                                                                setNodes(nds => nds.map(n => n.id === id ? {
+                                                                    ...n, data: {
+                                                                        ...n.data,
+                                                                        activeLayerIdx: newIdx,
+                                                                        isDirty: true,
+                                                                        isParagraphMerged: true,
+                                                                        mergeVersion: 4,
+                                                                        content: { ...(n.data.content || schema), layers: newLayers }
+                                                                    }
+                                                                } : n));
+                                                            }}
+                                                            className="px-2 py-1 bg-black text-white text-[9px] font-black hover:bg-zinc-700 pointer-events-auto"
+                                                        >
+                                                            复制
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const newLayers = layers.filter((_, i) => i !== idx);
+                                                                // 保存历史记录
+                                                                saveToHistory(newLayers);
+
+                                                                // 如果删除后还有图层，选中第一个；否则清除选中
+                                                                const newIdx = newLayers.length > 0 ? 0 : -1;
+                                                                setLocalActiveLayerIdx(newIdx);
+
+                                                                setNodes(nds => nds.map(n => n.id === id ? {
+                                                                    ...n, data: {
+                                                                        ...n.data,
+                                                                        activeLayerIdx: newIdx,
+                                                                        isDirty: true,
+                                                                        isParagraphMerged: true,
+                                                                        mergeVersion: 4,
+                                                                        content: { ...(n.data.content || schema), layers: newLayers }
+                                                                    }
+                                                                } : n));
+                                                            }}
+                                                            className="px-2 py-1 bg-black text-white text-[9px] font-black hover:bg-zinc-700"
+                                                        >
+                                                            删除
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    } else {
+                                        return (
+                                            <div
+                                                key={layer.id || `layer-${idx}`}
+                                                onMouseDown={(e) => isBackground ? null : handleMouseDown(e, idx)}
+                                                style={style}
+                                            >
+                                                {layer.url ? (
+                                                    <img
+                                                        src={layer.url.startsWith('/uploads') ? `http://localhost:8088${layer.url}` : layer.url}
+                                                        className={`w-full h-full pointer-events-none ${isBackground ? 'object-cover' : 'object-contain'}`}
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full border border-dashed border-black/20 flex flex-col items-center justify-center bg-zinc-50/50">
+                                                        <ImageIcon size={20} className="text-zinc-300" />
+                                                        <span className="text-[9px] font-bold text-zinc-400 mt-1">
+                                                            {isPlaceholder ? '展示位' : '空图片'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {isActive && !isBackground && <ResizeHandles index={idx} bbox={bbox} />}
+                                            </div>
+                                        );
+                                    }
+                                })
+                            ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center font-black">
+                                    <Sliders size={32} strokeWidth={1} className="text-zinc-500" />
+                                    <span className="text-[12px] uppercase tracking-widest text-zinc-500">
+                                        等待输入数据
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 分页导航控制廊 */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between bg-white text-black px-2 py-1.5 -mt-px border border-black nodrag">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setPage(prev => Math.max(0, prev - 1)); }}
+                                    disabled={currentPage === 0}
+                                    className={`p-1 hover:bg-zinc-100 disabled:opacity-30`}
+                                >
+                                    <ChevronDown size={16} strokeWidth={3} className="rotate-90" />
+                                </button>
+                                <div className="flex flex-col items-center">
+                                    <span className="text-[12px] font-black tabular-nums tracking-widest">
+                                        {currentPage + 1} / {totalPages}
+                                        {data.pageOverrides?.[currentPage] && <span className="text-red-500 ml-1">⚡</span>}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setPage(prev => Math.min(totalPages - 1, prev + 1)); }}
+                                    disabled={currentPage === totalPages - 1}
+                                    className={`p-1 hover:bg-zinc-100 disabled:opacity-30`}
+                                >
+                                    <ChevronDown size={16} strokeWidth={3} className="-rotate-90" />
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-3 mt-4">
+                            {/* 0. 保存为新模版 */}
+                            <button
+                                onClick={handleSaveTemplate}
+                                className="flex items-center justify-center gap-1.5 h-12 border border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white"
+                            >
+                                <Copy size={14} />
+                                保存为新模版
+                            </button>
+
+                            {/* 1. 导出操作区 - 一直显示 */}
                             <div className="flex -space-x-[1px]">
                                 <button
-                                    onClick={() => addLayer('text')}
-                                    className="flex-1 flex items-center justify-center gap-1.5 h-12 border border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white"
+                                    onClick={exportCurrentImage}
+                                    disabled={isExporting}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 h-12 border border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white ${isExporting ? 'opacity-50' : ''}`}
                                 >
-                                    <Type size={14} />
+                                    <ExternalLink size={14} />
+                                    {isExporting ? '导出中...' : '导出当前页'}
+                                </button>
+                                <button
+                                    onClick={handleBatchExport}
+                                    disabled={isExporting || totalPages <= 1}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 h-12 border border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white ${isExporting ? 'opacity-50' : ''}`}
+                                >
+                                    <Icons.Download size={14} />
+                                    {isExporting ? '导出中...' : `导出所有页(${totalPages})`}
+                                </button>
+                            </div>
+
+                            {/* 2. 原来的导出操作区注释掉 */}
+                            {false && layers.length > 0 && (
+                                <div className="flex flex-col gap-2 pt-2 border-t border-black/5">
+                                    <button
+                                        onClick={exportCurrentImage}
+                                        disabled={isExporting}
+                                        className={`flex items-center justify-center gap-2 w-full h-12 bg-black text-white text-[13px] font-black hover:bg-zinc-800 transition-all uppercase tracking-widest ${isExporting ? 'opacity-50' : ''}`}
+                                    >
+                                        <ExternalLink size={16} strokeWidth={2.5} />
+                                        {isExporting ? '正在导出图片...' : '导出当前页图'}
+                                    </button>
+
+                                    {totalPages > 1 && (
+                                        <button
+                                            onClick={handleBatchExport}
+                                            disabled={isExporting}
+                                            className={`flex items-center justify-center gap-2 w-full h-10 border border-black text-[11px] font-black hover:bg-black hover:text-white transition-all uppercase tracking-widest ${isExporting ? 'opacity-50' : ''}`}
+                                        >
+                                            <Icons.Download size={14} />
+                                            {isExporting ? '批量处理中...' : `批量导出全部 ${totalPages} 页`}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 右侧：属性面板区域 */}
+                    <div className="flex flex-col gap-5 p-1" style={{ width: '280px' }}>
+                        {/* 全局/当前页 模式切换 */}
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-black text-zinc-900 uppercase tracking-wider">编辑范围</span>
+                            <div className="flex border border-black">
+                                <button
+                                    onClick={() => setEditMode('global')}
+                                    className={`px-3 py-1.5 text-[10px] font-black transition-all ${editMode === 'global' ? 'bg-black text-white' : 'bg-white text-black hover:bg-zinc-100'
+                                        }`}
+                                >
+                                    全局
+                                </button>
+                                <button
+                                    onClick={() => setEditMode('page')}
+                                    className={`px-3 py-1.5 text-[10px] font-black transition-all ${editMode === 'page' ? 'bg-black text-white' : 'bg-white text-black hover:bg-zinc-100'
+                                        }`}
+                                >
+                                    当前页
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 背景设置 */}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-zinc-900 border-b border-zinc-100 pb-1">
+                                <ImageIcon size={12} />
+                                背景设置
+                            </div>
+                            <div
+                                className="aspect-video bg-zinc-50 border border-zinc-100 overflow-hidden relative group cursor-pointer"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                {currentBgUrl ? (
+                                    <img src={currentBgUrl} className="w-full h-full object-contain" />
+                                ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-300 gap-1">
+                                        <Icons.Upload size={24} strokeWidth={1} />
+                                        <span className="text-[9px] uppercase">暂无背景</span>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center">
+                                    <span className="text-white text-[10px] font-black opacity-0 group-hover:opacity-100">本地上传背景图</span>
+                                </div>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handleLocalUpload}
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={openSidebarAssets}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-black text-[10px] font-black hover:bg-black hover:text-white transition-all uppercase"
+                                >
+                                    <Icons.Save size={12} />
+                                    素材库
+                                </button>
+                                <button
+                                    onClick={() => { setShowGenPanel(!showGenPanel); if (!showGenPanel) setGenPrompt(''); }}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-black text-[10px] font-black hover:bg-black hover:text-white transition-all uppercase"
+                                >
+                                    <Icons.Wand2 size={12} />
+                                    {showGenPanel ? '收起>' : 'AI 生成'}
+                                </button>
+                            </div>
+
+                            {showGenPanel && (
+                                <div className="flex flex-col gap-2 bg-zinc-50 border border-zinc-100 mt-1 p-2">
+                                    {currentBgUrl && (
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] text-zinc-400 font-black uppercase">参考图模式</span>
+                                                <button
+                                                    onClick={() => setUseReferenceImage(!useReferenceImage)}
+                                                    className={`flex items-center gap-1.5 px-2 py-1 text-[9px] font-black border transition-all ${useReferenceImage ? 'bg-black text-white border-black' : 'bg-white text-zinc-500 border-zinc-200'}`}
+                                                >
+                                                    {useReferenceImage ? '✓ 使用参考图' : '☐ 使用参考图'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <textarea
+                                        value={genPrompt}
+                                        onChange={(e) => setGenPrompt(e.target.value)}
+                                        placeholder={useReferenceImage ? '描述想要如何修改背景...' : '输入背景生成描述词...'}
+                                        className="w-full h-16 p-2 text-[11px] bg-white border border-zinc-200 outline-none focus:border-black"
+                                    />
+                                    <button
+                                        onClick={handleAIBackground}
+                                        disabled={isGenerating}
+                                        className={`py-1.5 bg-black text-white text-[10px] font-black uppercase tracking-widest ${isGenerating ? 'opacity-50' : 'hover:bg-zinc-800'}`}
+                                    >
+                                        {isGenerating ? '正在生成...' : (useReferenceImage ? '基于参考图生成' : '开始生成')}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 图层属性编辑 - 一直显示 */}
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-zinc-900 border-b border-zinc-100 pb-1">
+                                <Type size={12} />
+                                文字样式
+                                {!activeLayer && <span className="text-zinc-400 text-[9px] normal-case">（请先选择文字图层）</span>}
+                            </div>
+
+                            {/* 字号、加粗、斜体、下划线 */}
+                            {activeLayer ? (
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        disabled={activeLayer.type !== 'text'}
+                                        onClick={() => activeLayer.type === 'text' && updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, fontSize: Math.max(12, (activeLayer.style?.fontSize || 40) - 4) } })}
+                                        className="w-8 h-8 border border-zinc-200 hover:border-black text-[10px] font-bold disabled:opacity-30"
+                                    >
+                                        -
+                                    </button>
+                                    <span className="text-[10px] font-bold w-12 text-center">{(activeLayer.style?.fontSize || 40)}px</span>
+                                    <button
+                                        disabled={activeLayer.type !== 'text'}
+                                        onClick={() => activeLayer.type === 'text' && updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, fontSize: (activeLayer.style?.fontSize || 40) + 4 } })}
+                                        className="w-8 h-8 border border-zinc-200 hover:border-black text-[10px] font-bold disabled:opacity-30"
+                                    >
+                                        +
+                                    </button>
+                                    <button
+                                        disabled={activeLayer.type !== 'text'}
+                                        onClick={() => activeLayer.type === 'text' && updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, fontWeight: activeLayer.style?.fontWeight === 'bold' ? 'normal' : 'bold' } })}
+                                        className={`w-8 h-8 border text-[10px] font-bold disabled:opacity-30 ${activeLayer.style?.fontWeight === 'bold' ? 'bg-black text-white border-black' : 'border-zinc-200 hover:border-black'}`}
+                                    >
+                                        B
+                                    </button>
+                                    <button
+                                        disabled={activeLayer.type !== 'text'}
+                                        onClick={() => activeLayer.type === 'text' && updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, fontStyle: activeLayer.style?.fontStyle === 'italic' ? 'normal' : 'italic' } })}
+                                        className={`w-8 h-8 border text-[10px] italic disabled:opacity-30 ${activeLayer.style?.fontStyle === 'italic' ? 'bg-black text-white border-black' : 'border-zinc-200 hover:border-black'}`}
+                                    >
+                                        I
+                                    </button>
+                                    <button
+                                        disabled={activeLayer.type !== 'text'}
+                                        onClick={() => activeLayer.type === 'text' && updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, textDecoration: activeLayer.style?.textDecoration === 'underline' ? 'none' : 'underline' } })}
+                                        className={`w-8 h-8 border text-[10px] underline disabled:opacity-30 ${activeLayer.style?.textDecoration === 'underline' ? 'bg-black text-white border-black' : 'border-zinc-200 hover:border-black'}`}
+                                    >
+                                        U
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-[10px] text-zinc-400 py-2">请在画布上选择一个文字图层进行编辑</div>
+                            )}
+
+                            {activeLayer && (
+                                <>
+                                    {/* 颜色选择 */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-[9px] text-zinc-400 font-black uppercase">文字颜色</span>
+                                        <div className="flex items-center gap-2">
+                                            {/* 获取图片中已有的文字颜色 */}
+                                            {(() => {
+                                                // 从所有图层中提取已有的文字颜色（去重，最多4个）
+                                                const existingColors = layers
+                                                    .filter(l => l.type === 'text' && l.style?.color && l.id !== activeLayer.id)
+                                                    .map(l => l.style.color)
+                                                    .filter((c, i, arr) => arr.indexOf(c) === i)
+                                                    .slice(0, 4);
+
+                                                // 基础颜色：黑、白、红、黄、绿、蓝
+                                                const baseColors = ['#000000', '#FFFFFF', '#FF2442', '#FFD700', '#32CD32', '#1E90FF'];
+
+                                                // 如果当前选中图层没有颜色，添加紫色作为默认提示
+                                                const currentColor = activeLayer.style?.color;
+                                                const showPurple = !currentColor || currentColor === '#000000';
+
+                                                // 组合颜色列表（确保总共8个）
+                                                const colorList = [...existingColors];
+                                                for (const c of baseColors) {
+                                                    if (colorList.length < 7) colorList.push(c);
+                                                }
+                                                if (showPurple && colorList.length < 7) {
+                                                    colorList.push('#9400D3');
+                                                }
+
+                                                return colorList.slice(0, 7).map((color) => (
+                                                    <button
+                                                        key={color}
+                                                        onClick={() => updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, color } })}
+                                                        className={`w-6 h-6 border ${activeLayer.style?.color === color ? 'border-black ring-1 ring-black' : 'border-zinc-300'}`}
+                                                        style={{ backgroundColor: color }}
+                                                        title={color}
+                                                    />
+                                                ));
+                                            })()}
+                                            {/* 七彩虹选择器（第8个） */}
+                                            <div className="relative w-6 h-6 overflow-hidden border border-zinc-300 cursor-pointer" title="任意色">
+                                                <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #ff0000 0%, #ff7f00 14%, #ffff00 28%, #00ff00 42%, #0000ff 56%, #4b0082 70%, #9400d3 84%, #ff1493 100%)' }} />
+                                                <input
+                                                    type="color"
+                                                    value={activeLayer.style?.color || '#000000'}
+                                                    onChange={(e) => updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, color: e.target.value } })}
+                                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 对齐方式 */}
+                                    <div className="flex items-center gap-1">
+                                        {['left', 'center', 'right'].map((align) => (
+                                            <button
+                                                key={align}
+                                                onClick={() => updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, textAlign: align } })}
+                                                className={`flex-1 py-1.5 border text-[9px] font-bold uppercase ${activeLayer.style?.textAlign === align ? 'bg-black text-white border-black' : 'border-zinc-200 hover:border-black'}`}
+                                            >
+                                                {align === 'left' ? '左' : align === 'center' ? '中' : '右'}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* 字体选择 - 下拉框样式 */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-[9px] text-zinc-400 font-black uppercase">字体</span>
+                                        <select
+                                            className="w-full h-8 px-2 border-b border-black text-[10px] font-bold outline-none bg-white"
+                                            value={activeLayer.style?.fontFamily || 'PingFang SC'}
+                                            onChange={(e) => updateLayerData(activeLayerIdx, { style: { ...activeLayer.style, fontFamily: e.target.value } })}
+                                        >
+                                            <option value="PingFang SC, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif">系统默认 (苹方)</option>
+                                            <option value="SmileySans, PingFang SC, sans-serif">得意黑</option>
+                                            <option value="AlibabaPuHuiTi, PingFang SC, sans-serif">阿里普惠体</option>
+                                            <option value="JiangXiZhuoKai, PingFang SC, sans-serif">江西拙楷</option>
+                                            <option value="XinYiGuanHei, PingFang SC, sans-serif">欣意冠黑体</option>
+                                        </select>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* 添加图层按钮 */}
+                            <div className="flex gap-2 mt-4 pt-4 border-t border-zinc-200">
+                                <button
+                                    onClick={() => addLayer('text')}
+                                    className="flex-1 py-2 border border-black text-black text-[10px] font-black hover:bg-black hover:text-white transition-all"
+                                >
                                     添加文字
                                 </button>
                                 <button
                                     onClick={() => addLayer('image')}
-                                    className="flex-1 flex items-center justify-center gap-1.5 h-12 border border-black text-[12px] font-black hover:bg-black hover:text-white transition-all bg-white"
+                                    className="flex-1 py-2 border border-black text-black text-[10px] font-black hover:bg-black hover:text-white transition-all"
                                 >
-                                    <ImageIcon size={14} />
                                     增加占位图片
                                 </button>
                             </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">图层精修控制</span>
-                                {activeLayer && (
-                                    <span className="text-[10px] px-2 py-0.5 bg-black text-white font-black uppercase">
-                                        {activeLayer.type === 'text' ? '文本图层 ' : '图片图层'}
-                                    </span>
-                                )}
-                            </div>
-
-                            {activeLayer ? (
-                                (() => {
-                                    // 在此作用域重新计算背景判定，修复 ReferenceError
-                                    const isActiveLayerBackground =
-                                        activeLayer.role?.includes('background') ||
-                                        activeLayer.role?.includes('reference') ||
-                                        activeLayer.id?.includes('background') ||
-                                        activeLayer.type === 'background';
-
-                                    return (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="flex flex-col gap-1">
-                                                <label className="text-[9px] font-bold text-zinc-400 uppercase">重心 X (0-1000)</label>
-                                                <input
-                                                    type="number"
-                                                    value={activeLayer.bbox?.[0] || 0}
-                                                    onChange={(e) => {
-                                                        const newBbox = [...activeLayer.bbox];
-                                                        newBbox[0] = parseInt(e.target.value) || 0;
-                                                        updateLayerData(activeLayerIdx, { bbox: newBbox });
-                                                    }}
-                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                    className="h-8 px-2 text-[12px] font-black border border-black outline-none bg-zinc-50 nodrag"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <label className="text-[9px] font-bold text-zinc-400 uppercase">重心 Y (0-1000)</label>
-                                                <input
-                                                    type="number"
-                                                    value={activeLayer.bbox?.[1] || 0}
-                                                    onChange={(e) => {
-                                                        const newBbox = [...activeLayer.bbox];
-                                                        newBbox[1] = parseInt(e.target.value) || 0;
-                                                        updateLayerData(activeLayerIdx, { bbox: newBbox });
-                                                    }}
-                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                    className="h-8 px-2 text-[12px] font-black border border-black outline-none bg-zinc-50 nodrag"
-                                                />
-                                            </div>
-
-                                            {/* 模版变量控制 */}
-                                            <div className="col-span-2 mt-2 pt-2 border-t border-black/5 flex flex-col gap-3">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[10px] font-bold text-black uppercase">模版交互配置</span>
-                                                </div>
-
-                                                {activeLayer.type === 'text' ? (
-                                                    <div className="flex flex-col gap-3">
-                                                        <div className="flex items-center justify-between">
-                                                            <label className="text-[9px] font-bold text-zinc-500 uppercase">设为可编辑变量</label>
-                                                            <button
-                                                                onClick={() => updateLayerData(activeLayerIdx, { isVariable: !activeLayer.isVariable })}
-                                                                className={`w-8 h-4 border border-black relative transition-colors ${activeLayer.isVariable ? 'bg-black' : 'bg-white'}`}
-                                                            >
-                                                                <div className={`absolute top-0 bottom-0 w-3 border-r border-black transition-all ${activeLayer.isVariable ? 'right-0 border-l border-r-0 bg-white' : 'left-0 bg-black'}`} />
-                                                            </button>
-                                                        </div>
-                                                        {activeLayer.isVariable && (
-                                                            <div className="flex flex-col gap-1">
-                                                                <label className="text-[9px] font-bold text-zinc-400 uppercase">占位提示文本</label>
-                                                                <input
-                                                                    type="text"
-                                                                    value={activeLayer.placeholder || ''}
-                                                                    placeholder="例如: 请输入标题..."
-                                                                    onChange={(e) => updateLayerData(activeLayerIdx, { placeholder: e.target.value })}
-                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                    className="h-8 px-2 text-[10px] font-bold border border-black outline-none bg-white nodrag"
-                                                                    onKeyDown={(e) => e.stopPropagation()}
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    !isActiveLayerBackground && (
-                                                        <div className="flex items-center justify-between">
-                                                            <label className="text-[9px] font-bold text-zinc-500 uppercase">设为展示区插槽</label>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const isP = !activeLayer.isPlaceholder;
-                                                                    updateLayerData(activeLayerIdx, {
-                                                                        isPlaceholder: isP,
-                                                                        role: isP ? 'placeholder_image' : 'other'
-                                                                    });
-                                                                }}
-                                                                className={`w-8 h-4 border border-black relative transition-colors ${activeLayer.isPlaceholder ? 'bg-black' : 'bg-white'}`}
-                                                            >
-                                                                <div className={`absolute top-0 bottom-0 w-3 border-r border-black transition-all ${activeLayer.isPlaceholder ? 'right-0 border-l border-r-0 bg-white' : 'left-0 bg-black'}`} />
-                                                            </button>
-                                                        </div>
-                                                    )
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })()
-                            ) : (
-                                <div className="py-6 text-center border border-black/10 text-zinc-500 text-[12px] font-black uppercase tracking-widest">
-                                    请选择图层进行微调
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>

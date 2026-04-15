@@ -31,6 +31,7 @@
         "js/compiled/components/ui/emojiicons.js",
         "js/compiled/components/ui/button.js",
         "js/compiled/components/ui/modal.js",
+        "src/components/ui/LoginModal.js",
         "js/compiled/context/app-context.js",
         "js/compiled/hooks/use-magnes-history.js",
         "js/compiled/hooks/use-magnes-node.js",
@@ -40,6 +41,7 @@
         "js/compiled/components/ui/node-toolbar.js",
         "js/compiled/components/ui/conversation-panel.js",
         "js/compiled/nodes/rf/BaseNode.js",
+        "js/compiled/components/ui/asset-picker.js",   // 素材选择器组件
         "js/compiled/nodes/rf/input-image-rf.js",
         "js/compiled/nodes/rf/gen-image-rf.js",
         "js/compiled/nodes/rf/layer-split-node-rf.js",
@@ -47,6 +49,7 @@
         "js/compiled/nodes/rf/composer-node-rf.js",
         "js/compiled/nodes/rf/image-text-template-rf.js",
         "js/compiled/nodes/rf/fine-tune-node-rf.js",
+        "js/compiled/nodes/rf/fine-tune-props-rf.js",  // 附属属性面板节点
         "js/compiled/nodes/rf/preview-rf.js",
         "js/compiled/nodes/rf/version-gallery-rf.js",
         "js/compiled/nodes/rf/text-node-rf.js",

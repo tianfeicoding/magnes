@@ -462,6 +462,16 @@
             };
             window.addEventListener('magnes:refresh_knowledge_base', handleRefreshRag);
 
+            // 10. 显示 Toast 提示 (由任意组件触发)
+            const handleShowToast = (e) => {
+                const { message, type = 'info', persistent = false } = e.detail || {};
+                if (message && toast) {
+                    console.log('[useWindowEvents] 🍞 显示Toast:', { message, type, persistent });
+                    toast(message, type, persistent);
+                }
+            };
+            window.addEventListener('magnes:show_toast', handleShowToast);
+
             return () => {
                 window.removeEventListener('magnes:expand_sidebar', handleExpandSidebar);
                 window.removeEventListener('magnes:xhs_publish', handlePubEvent);
@@ -478,6 +488,7 @@
                 window.removeEventListener('magnes:save-prompt-to-library', handleSavePromptToLibrary);
                 window.removeEventListener('magnes:refresh_knowledge_base', handleRefreshRag);
                 window.removeEventListener('magnes:draft_modified', handleDraftModified);
+                window.removeEventListener('magnes:show_toast', handleShowToast);
                 if (handleCreateNodeRequest) {
                     window.removeEventListener('magnes:create_rednote_node_request', handleCreateNodeRequest);
                 }

@@ -127,6 +127,7 @@
         Beaker: createIcon('Beaker'),
         RotateCcw: createIcon('RotateCcw'),
         Move: createIcon('Move'),
+        LogOut: createIcon('LogOut'),
     };
 
     window.MagnesComponents = window.MagnesComponents || {};

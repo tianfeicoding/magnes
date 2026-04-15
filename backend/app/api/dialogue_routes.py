@@ -12,11 +12,13 @@ Dialogue Routes
 import json
 import asyncio
 from typing import Optional, List, Any
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.agents.planner import run_planner
+from app.core.users import current_user
+from app.models.user import User
 
 router = APIRouter(
     prefix="/dialogue",

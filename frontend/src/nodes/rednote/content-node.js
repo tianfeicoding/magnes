@@ -491,7 +491,7 @@
                                         <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
                                         <span>DIAGNOSTIC ENGINE v2.1 ({currentItem.rawBlock && !currentItem.rawBlock.includes('AI') ? 'Regex-First' : 'Hybrid-Mode'})</span>
                                     </div>
-                                    
+
                                     <div className="mb-3">
                                         <div className="text-[8px] uppercase text-zinc-500 mb-1">Raw Extraction Material (此项对应的原始素材)</div>
                                         <div className="bg-zinc-800 p-2 text-[10px] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto rounded text-white leading-tight">

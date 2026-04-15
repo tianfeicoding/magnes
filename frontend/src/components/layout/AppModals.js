@@ -13,6 +13,7 @@
         NoteDetailModal,
         SourceModal
     } = window.MagnesComponents.Rag.Modals;
+    const LoginModal = window.MagnesComponents?.UI?.LoginModal;
 
     /**
      * 应用全局弹窗容器组件
@@ -56,7 +57,11 @@
         apiKeys,
         setApiKeys,
         jimengUseLocalFile,
-        setJimengUseLocalFile
+        setJimengUseLocalFile,
+        // 登录弹窗状态
+        loginModalOpen,
+        setLoginModalOpen,
+        onLoginSuccess
     }) => {
         const h = React.createElement;
 
@@ -143,6 +148,14 @@
                     onDone: () => setToastMsg('')
                 })}
 
+                {/* 5. 登录/注册弹窗 */}
+                {loginModalOpen && LoginModal && h(LoginModal, {
+                    isOpen: loginModalOpen,
+                    onClose: () => setLoginModalOpen(false),
+                    onLoginSuccess,
+                    requireApiKey: true
+                })}
+
                 {/* 6. 模型与全局设置弹窗 */}
                 <Modal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} title="模型配置" theme="light">
                     <div className="p-8 space-y-10">
@@ -192,10 +205,12 @@
                                                     const results = await Promise.all([
                                                         API.magnesFetch('/auth/config', {
                                                             method: 'POST',
+                                                            triggerLogin: true,
                                                             body: JSON.stringify({ value: apiKeys.global_api_url, config_type: 'global_api_url' })
                                                         }),
                                                         API.magnesFetch('/auth/config', {
                                                             method: 'POST',
+                                                            triggerLogin: true,
                                                             body: JSON.stringify({ value: apiKeys.global_api_key, config_type: 'global_api_key' })
                                                         })
                                                     ]);
@@ -258,10 +273,12 @@
                                                     const results = await Promise.all([
                                                         API.magnesFetch('/auth/config', {
                                                             method: 'POST',
+                                                            triggerLogin: true,
                                                             body: JSON.stringify({ value: apiKeys.slicer_api_url, config_type: 'slicer_api_url' })
                                                         }),
                                                         API.magnesFetch('/auth/config', {
                                                             method: 'POST',
+                                                            triggerLogin: true,
                                                             body: JSON.stringify({ value: apiKeys.slicer_api_key, config_type: 'slicer_api_key' })
                                                         })
                                                     ]);

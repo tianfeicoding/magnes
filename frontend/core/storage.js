@@ -16,7 +16,9 @@
         TEST_API_CONFIGS: 'magnes_test_configs',
         GLOBAL_KEY: 'magnes_global_key',
         JIMENG_USE_LOCAL_FILE: 'magnes_jimeng_use_local_file',
-        GENERATION_HISTORY: 'magnes_generation_history'
+        GENERATION_HISTORY: 'magnes_generation_history',
+        USER_TOKEN: 'magnes_user_token',
+        USER_INFO: 'magnes_user_info'
     };
 
     /**
@@ -117,6 +119,75 @@
         }
     }
 
+    /**
+     * 保存用户 JWT Token
+     * @param {string} token - JWT Token
+     */
+    function saveUserToken(token) {
+        try {
+            localStorage.setItem(STORAGE_KEYS.USER_TOKEN, token);
+            return true;
+        } catch (error) {
+            console.error('保存用户 Token 失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 加载用户 JWT Token
+     * @returns {string} Token，如果不存在返回空字符串
+     */
+    function loadUserToken() {
+        try {
+            return localStorage.getItem(STORAGE_KEYS.USER_TOKEN) || '';
+        } catch (error) {
+            console.error('加载用户 Token 失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 保存用户信息
+     * @param {Object} userInfo - 用户信息对象
+     */
+    function saveUserInfo(userInfo) {
+        try {
+            localStorage.setItem(STORAGE_KEYS.USER_INFO, JSON.stringify(userInfo));
+            return true;
+        } catch (error) {
+            console.error('保存用户信息失败:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 加载用户信息
+     * @returns {Object|null} 用户信息对象，如果不存在返回 null
+     */
+    function loadUserInfo() {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEYS.USER_INFO);
+            return saved ? JSON.parse(saved) : null;
+        } catch (error) {
+            console.error('加载用户信息失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 清除用户登录状态
+     */
+    function clearUserAuth() {
+        try {
+            localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.USER_INFO);
+            return true;
+        } catch (error) {
+            console.error('清除用户认证失败:', error);
+            return false;
+        }
+    }
+
     // 导出到全局命名空间
     if (!global.BaseAPI) {
         global.BaseAPI = {};
@@ -130,7 +201,12 @@
         loadGlobalKey,
         saveJimengUseLocalFile,
         loadJimengUseLocalFile,
-        clearAll
+        clearAll,
+        saveUserToken,
+        loadUserToken,
+        saveUserInfo,
+        loadUserInfo,
+        clearUserAuth
     };
 
     console.log('✅ BaseAPI Storage 已加载');

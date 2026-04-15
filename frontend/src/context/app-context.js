@@ -99,6 +99,27 @@
         });
         const [authStatus, setAuthStatus] = useState('loading'); // loading, configured, unconfigured, error
 
+        // 用户认证状态
+        const [user, setUser] = useState(() => {
+            try {
+                const Storage = window.BaseAPI?.Storage;
+                return Storage?.loadUserInfo() || { isLoggedIn: false };
+            } catch (e) {
+                return { isLoggedIn: false };
+            }
+        });
+        const [userToken, setUserToken] = useState(() => {
+            try {
+                const Storage = window.BaseAPI?.Storage;
+                return Storage?.loadUserToken() || '';
+            } catch (e) {
+                return '';
+            }
+        });
+
+        // 登录弹窗显示状态
+        const [loginModalOpen, setLoginModalOpen] = useState(false);
+
         // 即梦图生图使用本地文件设置
         const [jimengUseLocalFile, setJimengUseLocalFile] = useState(() => {
             const saved = localStorage.getItem('magnes_jimeng_use_local_file');
@@ -136,6 +157,46 @@
             localStorage.setItem('magnes_jimeng_use_local_file', String(jimengUseLocalFile));
         }, [jimengUseLocalFile]);
 
+        // 用户登录处理
+        const handleLoginSuccess = useCallback((data) => {
+            const Storage = window.BaseAPI?.Storage;
+            if (data.access_token && Storage) {
+                Storage.saveUserToken(data.access_token);
+                setUserToken(data.access_token);
+            }
+            if (data.user || data.username) {
+                const userInfo = data.user || { username: data.username, isLoggedIn: true };
+                Storage?.saveUserInfo(userInfo);
+                setUser(userInfo);
+            } else {
+                setUser(prev => ({ ...prev, isLoggedIn: true }));
+            }
+            setLoginModalOpen(false);
+        }, []);
+
+        // 用户登出处理
+        const handleLogout = useCallback(() => {
+            const Storage = window.BaseAPI?.Storage;
+            Storage?.clearUserAuth();
+            setUser({ isLoggedIn: false });
+            setUserToken('');
+        }, []);
+
+        // 检查是否已登录
+        const isLoggedIn = useMemo(() => {
+            return user?.isLoggedIn && userToken?.length > 0;
+        }, [user, userToken]);
+
+        // 监听打开登录弹窗事件
+        useEffect(() => {
+            const handleOpenLogin = (e) => {
+                console.log('[AppContext] 🔓 收到打开登录弹窗事件:', e.detail);
+                setLoginModalOpen(true);
+            };
+            window.addEventListener('magnes:open_login', handleOpenLogin);
+            return () => window.removeEventListener('magnes:open_login', handleOpenLogin);
+        }, []);
+
         const addNode = (node) => setNodes(prev => [...prev, node]);
         const updateNode = useCallback((id, data) => {
             setNodes(prev => prev.map(n => n.id === id ? { ...n, ...data } : n));
@@ -165,7 +226,14 @@
             apiKeys, setApiKeys, authStatus, setAuthStatus,
             jimengUseLocalFile, setJimengUseLocalFile,
             lightboxItem, setLightboxItem,
-            registerStartGeneration, startGeneration
+            registerStartGeneration, startGeneration,
+            // 用户认证相关
+            user, setUser,
+            userToken, setUserToken,
+            isLoggedIn,
+            loginModalOpen, setLoginModalOpen,
+            handleLoginSuccess,
+            handleLogout
         };
 
         return React.createElement(MagnesContext.Provider, { value }, children);

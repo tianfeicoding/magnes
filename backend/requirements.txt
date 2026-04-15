@@ -49,8 +49,15 @@ mcp>=0.1.0
 # Utilities
 uuid>=1.30
 datasets>=2.14.0
+
+# Checkpoints & Document Processing
 langgraph-checkpoint-sqlite>=1.0.0
 PyMuPDF>=1.23.0
 python-docx>=0.8.11
 openpyxl>=3.1.0
 lxml>=4.9.0
+
+# User Authentication
+fastapi-users[sqlalchemy]>=12.1.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4

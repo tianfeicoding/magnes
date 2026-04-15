@@ -83,9 +83,9 @@ async def call_image_generate(
                         sub_path = relative_url.replace("/skills_assets/", "", 1)
                         local_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".agent", sub_path))
                     elif relative_url.startswith("/uploads/"):
-                        # /uploads/ -> data/uploads/
+                        # /uploads/ -> data/uploads/ (注意：data 目录在 backend 文件夹下)
                         sub_path = relative_url.replace("/uploads/", "", 1)
-                        local_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "uploads", sub_path))
+                        local_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploads", sub_path))
                     
                     if local_file_path and os.path.exists(local_file_path):
                         with open(local_file_path, "rb") as f:

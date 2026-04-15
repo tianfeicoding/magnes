@@ -1,6 +1,10 @@
 (function () {
     const { React } = window;
-    const { History, RefreshCw, Settings } = window.MagnesComponents.UI.Icons;
+    const Icons = window.MagnesComponents?.UI?.Icons || {};
+    const RefreshCw = Icons.RefreshCw || (() => null);
+    const Settings = Icons.Settings || (() => null);
+    const User = Icons.User || (() => null);
+    const LogOut = Icons.LogOut || (() => null);
 
     /**
      * 应用顶部导航栏组件
@@ -9,12 +13,19 @@
     const AppHeader = ({
         activeTab,
         setActiveTab,
-        historyOpen,
-        setHistoryOpen,
-        historyCount,
         loadStats,
-        setSettingsOpen
+        setSettingsOpen,
+        // 用户认证相关
+        user,
+        isLoggedIn,
+        setLoginModalOpen,
+        handleLogout
     }) => {
+        // 处理登出
+        const onLogout = () => {
+            handleLogout();
+        };
+
         return (
             <div className="h-16 bg-white border-b border-black flex items-center px-6 justify-between shrink-0 z-[100] relative">
                 <h1 className="font-bold text-2xl text-black tracking-tighter">Magnes</h1>
@@ -39,14 +50,7 @@
 
                 {/* 右侧操作区域 */}
                 <div className="flex items-center gap-4">
-                    {activeTab === 'canvas' ? (
-                        <button
-                            onClick={() => setHistoryOpen(!historyOpen)}
-                            className="text-black/40 hover:text-black mt-1 relative"
-                        >
-                            <History size={18} />
-                        </button>
-                    ) : (
+                    {activeTab !== 'canvas' && (
                         <button onClick={loadStats} className="text-black/40 hover:text-black mt-1">
                             <RefreshCw size={18} />
                         </button>
@@ -54,6 +58,27 @@
                     <button onClick={() => setSettingsOpen(true)} className="text-black/40 hover:text-black mt-1">
                         <Settings size={18} />
                     </button>
+
+                    {/* 用户登录/登出区域 */}
+                    <div className="flex items-center">
+                        {isLoggedIn ? (
+                            <button
+                                onClick={onLogout}
+                                className="text-black/40 hover:text-black mt-1"
+                                title="退出登录"
+                            >
+                                <LogOut size={18} />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setLoginModalOpen(true)}
+                                className="text-black/40 hover:text-black mt-1"
+                                title="登录"
+                            >
+                                <User size={18} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         );

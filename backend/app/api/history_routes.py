@@ -12,6 +12,8 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models import GenerationHistory
+from app.models.user import User
+from app.core.users import current_user
 
 router = APIRouter(
     prefix="/history",
@@ -19,23 +21,39 @@ router = APIRouter(
 )
 
 @router.get("/")
-async def list_history(db: AsyncSession = Depends(get_db)):
-    """获取所有生成历史"""
+async def list_history(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    """获取当前用户的所有生成历史"""
     result = await db.execute(
-        select(GenerationHistory).order_by(GenerationHistory.created_at.desc())
+        select(GenerationHistory)
+        .where(GenerationHistory.user_id == user.id)
+        .order_by(GenerationHistory.created_at.desc())
     )
     history = result.scalars().all()
     return [h.to_dict() for h in history]
 
 @router.post("/")
-async def save_history_item(data: dict, db: AsyncSession = Depends(get_db)):
-    """保存或更新单条历史记录"""
+async def save_history_item(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    """保存或更新单条历史记录（仅当前用户）"""
     item_id = data.get("id")
     if not item_id:
         raise HTTPException(status_code=400, detail="Missing history item ID")
 
-    # 检查是否存在
-    existing = await db.get(GenerationHistory, item_id)
+    # 检查是否存在（且属于当前用户）
+    result = await db.execute(
+        select(GenerationHistory).where(
+            GenerationHistory.id == item_id,
+            GenerationHistory.user_id == user.id
+        )
+    )
+    existing = result.scalar_one_or_none()
+
     if existing:
         # 更新逻辑
         for key in ["status", "url", "content", "progress", "errorMsg", "metadata"]:
@@ -47,6 +65,7 @@ async def save_history_item(data: dict, db: AsyncSession = Depends(get_db)):
         # 新增逻辑
         new_item = GenerationHistory(
             id=item_id,
+            user_id=user.id,  # 关联当前用户
             type=data.get("type", "image"),
             status=data.get("status", "generating"),
             prompt=data.get("prompt"),
@@ -59,24 +78,40 @@ async def save_history_item(data: dict, db: AsyncSession = Depends(get_db)):
             metadata_info=data.get("metadata")
         )
         db.add(new_item)
-    
+
     await db.commit()
     return {"status": "success", "id": item_id}
 
 @router.delete("/{item_id}")
-async def delete_history_item(item_id: str, db: AsyncSession = Depends(get_db)):
-    """删除单条历史记录"""
-    item = await db.get(GenerationHistory, item_id)
+async def delete_history_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    """删除单条历史记录（仅当前用户）"""
+    result = await db.execute(
+        select(GenerationHistory).where(
+            GenerationHistory.id == item_id,
+            GenerationHistory.user_id == user.id
+        )
+    )
+    item = result.scalar_one_or_none()
+
     if not item:
         raise HTTPException(status_code=404, detail="History item not found")
-    
+
     await db.delete(item)
     await db.commit()
     return {"status": "success"}
 
 @router.delete("/clear/all")
-async def clear_all_history(db: AsyncSession = Depends(get_db)):
-    """清空所有历史记录 (慎用)"""
-    await db.execute(delete(GenerationHistory))
+async def clear_all_history(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
+    """清空当前用户的所有历史记录"""
+    await db.execute(
+        delete(GenerationHistory).where(GenerationHistory.user_id == user.id)
+    )
     await db.commit()
     return {"status": "success"}

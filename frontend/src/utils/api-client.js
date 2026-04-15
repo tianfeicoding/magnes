@@ -18,28 +18,47 @@
         /**
          * Magnes Backend 专属通用 Fetch 封装
          * 自动处理 BaseUrl (localhost/同源) 和 Token (Bearer)
+         * 优先使用用户 JWT Token，如果不存在则使用旧的全局 Token
          */
         magnesFetch: async (path, options = {}) => {
-            const token = window.MagnesComponents.Utils.Constants?.MAGNES_API_TOKEN || '';
-            const baseUrl = window.MagnesComponents.Utils.Constants?.MAGNES_API_URL || 
+            // 优先使用用户 JWT Token
+            const Storage = window.BaseAPI?.Storage;
+            const userToken = Storage?.loadUserToken ? Storage.loadUserToken() : '';
+            const fallbackToken = window.MagnesComponents.Utils.Constants?.MAGNES_API_TOKEN || '';
+            const token = userToken || fallbackToken;
+
+            // 调试日志
+            console.log('[API Client] magnesFetch:', { path, hasUserToken: !!userToken, tokenLength: token?.length, authHeader: `Bearer ${token?.substring(0, 15)}...` });
+
+            const baseUrl = window.MagnesComponents.Utils.Constants?.MAGNES_API_URL ||
                 (window.location.protocol === 'file:' ? 'http://localhost:8088/api/v1' : '/api/v1');
-            
+
             const headers = {
                 'Authorization': `Bearer ${token}`,
                 ...options.headers
             };
-            
+
             if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
                 headers['Content-Type'] = 'application/json';
             }
 
             const fetchUrl = path.startsWith('http') ? path : `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
-            
-            return fetch(fetchUrl, {
+
+            const response = await fetch(fetchUrl, {
                 ...options,
                 headers,
                 credentials: 'include'
             });
+
+            // 处理认证错误：401/403 触发登录弹窗（仅当 triggerLogin 为 true 时）
+            if ((response.status === 401 || response.status === 403) && options.triggerLogin) {
+                console.warn('[API Client] 🔒 认证失败，触发登录弹窗');
+                window.dispatchEvent(new CustomEvent('magnes:open_login', {
+                    detail: { reason: 'auth_required', message: '请先登录后再使用此功能' }
+                }));
+            }
+
+            return response;
         },
 
         /**

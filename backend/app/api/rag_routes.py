@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import tempfile
 import os
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import json
@@ -21,6 +21,8 @@ from app.rag.vectorstore.chroma_store import (
 from app.rag.retrieval.bm25_retriever import get_bm25_index
 # from app.rag.evaluation.ragas_evaluator import get_ragas_evaluator
 from app.core.llm_config import get_llm_config
+from app.core.users import current_user
+from app.models.user import User
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -85,19 +87,22 @@ class CanvasSyncRequest(BaseModel):
 # ─── 接口实现 ────────────────────────────────────────────────────────────────
 
 @router.post("/ingest/url")
-async def ingest_single_url(request: IngestUrlRequest):
+async def ingest_single_url(
+    request: IngestUrlRequest,
+    user: User = Depends(current_user)
+):
     """
-    导入单条小红书笔记
+    导入单条小红书笔记（用户隔离）
     POST /api/v1/rag/ingest/url
     Body: { "url": "https://www.xiaohongshu.com/explore/xxx" }
     """
     try:
         doc = await collect_xhs_note(request.url)
-        is_new = await upsert_document(doc)
-        
+        is_new = await upsert_document(doc, user_id=user.id)
+
         # 标记 BM25 索引需要重建
         get_bm25_index().mark_dirty()
-        
+
         return {
             "status": "success",
             "doc_id": doc.id,
@@ -112,7 +117,10 @@ async def ingest_single_url(request: IngestUrlRequest):
 
 
 @router.post("/ingest/batch")
-async def ingest_batch_urls(request: IngestBatchRequest):
+async def ingest_batch_urls(
+    request: IngestBatchRequest,
+    user: User = Depends(current_user)
+):
     """
     批量导入小红书笔记
     POST /api/v1/rag/ingest/batch
@@ -129,7 +137,7 @@ async def ingest_batch_urls(request: IngestBatchRequest):
     
     for doc in docs:
         try:
-            is_new = await upsert_document(doc)
+            is_new = await upsert_document(doc, user_id=user.id)
             if is_new: new_count += 1
             else: updated_count += 1
         except Exception as e:
@@ -280,15 +288,18 @@ async def rewrite_text(request: RewriteRequest):
 
 
 @router.post("/ingest/gallery")
-async def ingest_gallery_version(request: IngestGalleryRequest):
+async def ingest_gallery_version(
+    request: IngestGalleryRequest,
+    user: User = Depends(current_user)
+):
     """
-    从 Version Gallery 收藏版本到知识库
+    从 Version Gallery 收藏版本到知识库（用户隔离）
     POST /api/v1/rag/ingest/gallery
     Body: { "version_data": { "version_id": "...", "image_url": "...", ... } }
     """
     try:
         doc = await extract_from_gallery(request.version_data)
-        is_new = await upsert_document(doc)
+        is_new = await upsert_document(doc, user_id=user.id)
         
         # 标记 BM25 需要重建
         get_bm25_index().mark_dirty()
@@ -307,13 +318,16 @@ async def ingest_gallery_version(request: IngestGalleryRequest):
 
 
 @router.delete("/documents/{doc_id}")
-async def delete_rag_document(doc_id: str):
+async def delete_rag_document(
+    doc_id: str,
+    user: User = Depends(current_user)
+):
     """
-    从知识库/灵感库删除文档
+    从知识库/灵感库删除文档（用户隔离）
     DELETE /api/v1/rag/documents/{doc_id}
     """
     try:
-        success = await delete_document(doc_id)
+        success = await delete_document(doc_id, user_id=user.id)
         if not success:
             raise HTTPException(status_code=404, detail="文档不存在或删除失败")
         
@@ -331,20 +345,23 @@ async def delete_rag_document(doc_id: str):
 
 
 @router.post("/ingest/gallery/batch")
-async def ingest_gallery_batch(request: IngestBatchGalleryRequest):
+async def ingest_gallery_batch(
+    request: IngestBatchGalleryRequest,
+    user: User = Depends(current_user)
+):
     """
-    批量同步 Version Gallery 历史版本（系统启动时扫描所有 good 版本用）
+    批量同步 Version Gallery 历史版本（用户隔离）
     POST /api/v1/rag/ingest/gallery/batch
     Body: { "versions": [...] }
     """
     new_count = 0
     updated_count = 0
     failed_count = 0
-    
+
     for version_data in request.versions:
         try:
             doc = await extract_from_gallery(version_data)
-            is_new = await upsert_document(doc)
+            is_new = await upsert_document(doc, user_id=user.id)
             if is_new:
                 new_count += 1
             else:
@@ -369,13 +386,14 @@ async def ingest_gallery_batch(request: IngestBatchGalleryRequest):
 async def list_documents(
     source_type: Optional[str] = Query(None, description="过滤来源: xhs_covers 或 version_gallery"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    user: User = Depends(current_user)
 ):
     """
     获取知识库所有条目
     GET /api/v1/rag/documents?source_type=xhs_covers&limit=50&offset=0
     """
-    docs = await get_all_documents(source_type=source_type, limit=limit, offset=offset)
+    docs = await get_all_documents(source_type=source_type, limit=limit, offset=offset, user_id=user.id)
     return {
         "status": "success",
         "count": len(docs),
@@ -419,29 +437,32 @@ async def delete_document_by_id(doc_id: str):
 
 
 @router.delete("/documents/actions/clear")
-async def clear_all_documents(source_type: Optional[str] = Query(None, description="过滤来源: xhs_covers 或 version_gallery")):
+async def clear_all_documents(
+    source_type: Optional[str] = Query(None, description="过滤来源: xhs_covers 或 version_gallery"),
+    user: User = Depends(current_user)
+):
     """
-    清空所有文档
+    清空当前用户的所有文档
     DELETE /api/v1/rag/documents/actions/clear?source_type=xhs_covers
     """
     from app.rag.vectorstore.chroma_store import delete_all_documents
-    
-    count = await delete_all_documents(source_type=source_type)
-    
+
+    count = await delete_all_documents(source_type=source_type, user_id=user.id)
+
     # 重建 BM25 索引
     get_bm25_index().mark_dirty()
-    
+
     return {"status": "success", "cleared_count": count}
 
 
 @router.get("/stats")
-async def get_knowledge_stats():
+async def get_knowledge_stats(user: User = Depends(current_user)):
     """
-    获取知识库统计信息
+    获取当前用户的知识库统计信息
     GET /api/v1/rag/stats
     Response: { "total": 156, "xhs_covers": 132, "version_gallery": 24, "knowledge_base": 0 }
     """
-    stats = await get_stats()
+    stats = await get_stats(user_id=user.id)
     return stats
 
 
@@ -587,7 +608,8 @@ async def sync_to_canvas(request: CanvasSyncRequest):
 async def upload_knowledge_document(
     file: UploadFile = File(...),
     category: str = Form("通用资料"),
-    tags: str = Form("")
+    tags: str = Form(""),
+    user: User = Depends(current_user)
 ):
     """
     上传文档到通用知识库
@@ -629,8 +651,8 @@ async def upload_knowledge_document(
         # 智能分块 (LlamaIndex 驱动)
         chunks = await chunk_document_with_llama(parsed, doc_id=doc_id, category=category)
 
-        # 写入 ChromaDB
-        success_count = await upsert_knowledge_chunks(chunks)
+        # 写入 ChromaDB（带上 user_id 实现用户隔离）
+        success_count = await upsert_knowledge_chunks(chunks, user_id=user.id)
 
         # 标记 BM25 索引需要重建
         get_bm25_index().mark_dirty()
@@ -699,14 +721,15 @@ async def get_knowledge_image(image_id: str):
 async def list_knowledge_documents(
     category: Optional[str] = Query(None, description="按分类过滤"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    user: User = Depends(current_user)
 ):
     """
-    获取知识库文档列表（文件级）
+    获取知识库文档列表（文件级，用户隔离）
     GET /api/v1/rag/knowledge/documents?category=品牌指南
     """
     from app.rag.vectorstore.chroma_store import get_knowledge_documents
-    docs = await get_knowledge_documents(limit=limit, offset=offset, category=category)
+    docs = await get_knowledge_documents(limit=limit, offset=offset, category=category, user_id=user.id)
     return {
         "status": "success",
         "count": len(docs),
@@ -715,15 +738,18 @@ async def list_knowledge_documents(
 
 
 @router.delete("/knowledge/documents/{doc_id}")
-async def delete_knowledge_doc(doc_id: str):
+async def delete_knowledge_doc(
+    doc_id: str,
+    user: User = Depends(current_user)
+):
     """
     删除知识库文档及其所有分块
     DELETE /api/v1/rag/knowledge/documents/{doc_id}
     """
     from app.rag.vectorstore.chroma_store import delete_knowledge_document
-    count = await delete_knowledge_document(doc_id)
+    count = await delete_knowledge_document(doc_id, user_id=user.id)
     if count == 0:
-        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在或无权限")
 
     get_bm25_index().mark_dirty()
     return {"status": "success", "deleted_id": doc_id, "deleted_chunks": count}
@@ -1155,24 +1181,28 @@ async def get_evaluation_status(task_id: str):
 # ─── 图库管理业务接口 (Gallery Management) ───────────────────────────────────
 
 @router.patch("/gallery/{doc_id}/tags")
-async def update_gallery_tags_endpoint(doc_id: str, request: UpdateGalleryTagsRequest):
-    """更新图库图片标签"""
+async def update_gallery_tags_endpoint(
+    doc_id: str,
+    request: UpdateGalleryTagsRequest,
+    user: User = Depends(current_user)
+):
+    """更新当前用户的图库图片标签"""
     from app.rag.vectorstore.chroma_store import update_gallery_metadata
-    success = await update_gallery_metadata(doc_id, {"user_tags": request.tags})
+    success = await update_gallery_metadata(doc_id, {"user_tags": request.tags}, user_id=user.id)
     if not success:
-        raise HTTPException(status_code=404, detail="文档不存在或更新失败")
+        raise HTTPException(status_code=404, detail="文档不存在或无权限")
     return {"status": "success", "doc_id": doc_id, "tags": request.tags}
 
 class UpdateGalleryRatingRequest(BaseModel):
     rating: str
 
 @router.patch("/gallery/{doc_id}/rating")
-async def update_gallery_rating_endpoint(doc_id: str, request: UpdateGalleryRatingRequest):
+async def update_gallery_rating_endpoint(doc_id: str, request: UpdateGalleryRatingRequest, user: User = Depends(current_user)):
     """更新图库图片评分 (good/unrated/bad)"""
     from app.rag.vectorstore.chroma_store import update_gallery_metadata
-    success = await update_gallery_metadata(doc_id, {"rating": request.rating})
+    success = await update_gallery_metadata(doc_id, {"rating": request.rating}, user_id=user.id)
     if not success:
-        raise HTTPException(status_code=404, detail="文档不存在或更新失败")
+        raise HTTPException(status_code=404, detail="文档不存在或无权限")
     return {"status": "success", "doc_id": doc_id, "rating": request.rating}
 
 @router.put("/gallery/batch/tags")
@@ -1186,32 +1216,34 @@ async def batch_update_gallery_tags_endpoint(request: BatchUpdateGalleryTagsRequ
     return {"status": "success", "updated_count": updated_count}
 
 @router.patch("/gallery/{doc_id}/folder")
-async def update_gallery_folder_endpoint(doc_id: str, request: UpdateGalleryFolderRequest):
+async def update_gallery_folder_endpoint(doc_id: str, request: UpdateGalleryFolderRequest, user: User = Depends(current_user)):
     """更新图库图片文件夹名称"""
     from app.rag.vectorstore.chroma_store import update_gallery_metadata
-    success = await update_gallery_metadata(doc_id, {"folder_name": request.folder_name})
+    success = await update_gallery_metadata(doc_id, {"folder_name": request.folder_name}, user_id=user.id)
     if not success:
-        raise HTTPException(status_code=404, detail="文档不存在或更新失败")
+        raise HTTPException(status_code=404, detail="文档不存在或无权限")
     return {"status": "success", "doc_id": doc_id, "folder_name": request.folder_name}
 
 
 @router.get("/favorites")
-async def list_favorites(limit: int = 100):
-    """获取收藏图片列表"""
+async def list_favorites(limit: int = 100, user: User = Depends(current_user)):
+    """获取当前用户的收藏图片列表"""
     try:
         from app.rag.vectorstore import chroma_store
-        images = await chroma_store.get_favorite_images(limit=limit)
+        images = await chroma_store.get_favorite_images(limit=limit, user_id=user.id)
         return {"status": "success", "images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/favorites")
-async def add_favorite(req: FavoriteRequest):
-    """添加收藏图片"""
+async def add_favorite(req: FavoriteRequest, user: User = Depends(current_user)):
+    """添加收藏图片（用户隔离）"""
     try:
         from app.rag.vectorstore import chroma_store
-        success = await chroma_store.upsert_favorite_image(req.img_id, req.metadata)
+        # 添加 user_id 到 metadata
+        metadata = {**req.metadata, "user_id": user.id}
+        success = await chroma_store.upsert_favorite_image(req.img_id, metadata, user_id=user.id)
         if success:
             return {"status": "success"}
         else:
@@ -1221,14 +1253,14 @@ async def add_favorite(req: FavoriteRequest):
 
 
 @router.delete("/favorites/{img_id}")
-async def remove_favorite(img_id: str):
-    """取消收藏图片"""
+async def remove_favorite(img_id: str, user: User = Depends(current_user)):
+    """取消收藏图片（用户隔离）"""
     try:
         from app.rag.vectorstore import chroma_store
-        success = await chroma_store.delete_favorite_image(img_id)
+        success = await chroma_store.delete_favorite_image(img_id, user_id=user.id)
         if success:
             return {"status": "success"}
         else:
-            raise HTTPException(status_code=500, detail="取消收藏失败")
+            raise HTTPException(status_code=404, detail="收藏不存在或无权限")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

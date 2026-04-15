@@ -164,7 +164,7 @@
          * @returns {Array} 填充内容后的图层列表
          */
         mapContentToLayers: (layers, content, options = {}) => {
-            const { pageOffset = 0, itemsPerPage = 3 } = options;
+            const { pageOffset = 0, itemsPerPage = 3, overrides = null } = options;
             if (!layers || !content) return layers;
 
             // 自动解包：如果输入的是完整的 Node Data 且包含 content 或 extractedContent 容器
@@ -404,11 +404,21 @@
                 return l;
             });
 
+            const finalMappedLayers = mappedLayers.map(layer => {
+                if (overrides && Array.isArray(overrides)) {
+                    const override = overrides.find(o => o.id === layer.id);
+                    if (override) {
+                        return { ...layer, ...override };
+                    }
+                }
+                return layer;
+            });
+
             // 专项检查：哪些层最终拿到了 URL？
-            const layersWithUrl = mappedLayers.filter(l => l.url);
+            const layersWithUrl = finalMappedLayers.filter(l => l.url);
             console.log('[LayoutUtils] FINAL MAPPED STATUS (Layers with URL):', layersWithUrl.length, layersWithUrl);
 
-            return mappedLayers;
+            return finalMappedLayers;
         }
     };
 

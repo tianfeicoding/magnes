@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Security, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 import os
 import logging
 
@@ -36,7 +37,7 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 # 显式加载该目录下的 .env 文件
 load_dotenv(os.path.join(backend_dir, ".env"))
 
-from app.core.database import engine, Base
+from app.core.database import engine, Base, get_db
 from app.api.template_routes import router as template_router
 from app.api.history_routes import router as history_router
 from app.api.task_routes import router as task_router
@@ -45,7 +46,11 @@ from app.api.prompt_routes import router as prompt_router
 from app.api.dialogue_routes import router as dialogue_router  # [Phase 1] 对话模式
 from app.api.rag_routes import router as rag_router, public_router as public_rag_router # [Phase 2] RAG 知识库
 from app.api.export_routes import router as export_router      # [NEW] 图片导出
-from app.api.auth_routes import router as auth_router          # [NEW] 安全认证
+from app.api.auth import router as auth_router                # [NEW] FastAPI-Users 认证路由
+from app.api.auth_routes import router as config_router        # [NEW] 配置管理路由
+from app.api.painter_routes import router as painter_router    # [NEW] AI 绘图
+from app.core.users import fastapi_users, auth_backend, current_user  # [NEW] FastAPI-Users
+from app.middleware.auth import AuthMiddleware                  # [NEW] 认证中间件
 
 # [启动自检] 检查环境变量是否加载成功
 if os.getenv("API_KEY"):
@@ -129,32 +134,107 @@ app = FastAPI(title="Magnes Studio API", version="1.0.0", lifespan=lifespan)
 
 security = HTTPBearer()
 
-async def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """验证 Bearer Token 鉴权"""
-    expected_token = os.getenv("MAGNES_API_TOKEN")
-    
-    if not expected_token:
-        print("⚠️ 警告: 未设置 MAGNES_API_TOKEN，后端处于无鉴权运行状态")
-        return None
-        
-    if credentials.credentials != expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid or missing Magnes API Token"
-        )
-    return credentials.credentials
+async def verify_token(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    db: AsyncSession = Depends(get_db)
+) -> "User":
+    """验证 Bearer Token 鉴权 - 返回当前用户对象"""
+    token = credentials.credentials
+
+    # Debug log
+    print(f"[Auth] Verifying token, length: {len(token)}, preview: {token[:20]}...")
+
+    # Try to validate as JWT token (new user system)
+    try:
+        from app.core.users import jwt_strategy, UserManager, SECRET_KEY
+        from fastapi_users.db import SQLAlchemyUserDatabase
+        from app.models.user import User
+        import jwt as pyjwt
+
+        # Manual decode for debugging (skip audience verification)
+        try:
+            decoded = pyjwt.decode(token, SECRET_KEY, algorithms=["HS256"], audience=None, options={"verify_aud": False})
+            print(f"[Auth] Manual decode successful: sub={decoded.get('sub')}, user_id={decoded.get('user_id')}, aud={decoded.get('aud')}")
+            print(f"[Auth] Full decoded token keys: {list(decoded.keys())}")
+        except Exception as decode_error:
+            print(f"[Auth] Manual decode failed: {decode_error}")
+
+        # Create user manager
+        user_db = SQLAlchemyUserDatabase(db, User)
+        user_manager = UserManager(user_db)
+
+        # Read token with user_manager
+        user = await jwt_strategy.read_token(token, user_manager)
+        if user:
+            print(f"[Auth] Token valid for user: {user.username} (id: {user.id})")
+            return user  # Valid JWT token, return user object
+        else:
+            print("[Auth] Token read returned None, trying manual lookup...")
+            # Fallback: manually decode and lookup user
+            try:
+                from sqlalchemy import select
+                decoded = pyjwt.decode(token, SECRET_KEY, algorithms=["HS256"], audience=None, options={"verify_aud": False})
+                user_id = decoded.get('user_id') or decoded.get('sub')
+                if user_id:
+                    result = await db.execute(select(User).where(User.id == user_id))
+                    user = result.scalar_one_or_none()
+                    if user:
+                        print(f"[Auth] Manual lookup successful for user: {user.username}")
+                        return user
+            except Exception as manual_error:
+                print(f"[Auth] Manual lookup failed: {manual_error}")
+                import traceback
+                traceback.print_exc()
+        # If we get here, manual lookup also failed
+        print("[Auth] All token validation methods failed")
+    except Exception as e:
+        print(f"[Auth] Token validation error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # No valid token found
+    print("[Auth] Raising 403 - no valid user found")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid or missing token"
+    )
 
 # Hamilton: 解决 CORS (跨域资源共享) 问题
 # 显式允许 file:// 协议产生的 null origin (如果需要支持 file://)
 # 生产环境下应严格限制为前端部署域名
-    # 构造 LangGraph 的初始状态
-    app.add_middleware(
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173", "http://127.0.0.1:8088", "http://101.35.231.206", "http://magnes.online", "https://magnes.online", "http://www.magnes.online", "https://www.magnes.online"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8088",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8088",
+        "http://101.35.231.206",
+        "http://magnes.online",
+        "https://magnes.online",
+        "http://www.magnes.online",
+        "https://www.magnes.online"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    )
+)
+
+# Add authentication middleware
+app.add_middleware(AuthMiddleware)
+
+@app.get("/")
+def read_root():
+    print("Ping! 收到前端存活性探测请求")
+    return {"status": "Magnes API is running", "engine": "LangGraph 1.0 (Async)"}
+
+@app.post("/api/v1/design")
+async def create_design_task(request: DesignRequest):
+    """
+    接收用户的设计意图，启动 Designer Agent 任务流。
+    """
     initial_input = {
         "messages": [("user", request.instruction)],
         "instruction": request.instruction,
@@ -198,11 +278,13 @@ app.include_router(history_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(task_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(mcp_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(prompt_router, prefix="/api/v1", dependencies=common_deps)
-app.include_router(dialogue_router, prefix="/api/v1", dependencies=common_deps)  # [Phase 1] 对话模式 SSE
+app.include_router(dialogue_router, prefix="/api/v1", dependencies=common_deps)  # [Phase 1] 对话模式 SSE (已添加认证)
 app.include_router(public_rag_router, prefix="/api/v1")                         # [Phase 2] RAG 公共接口 (图片等)
-app.include_router(rag_router, prefix="/api/v1", dependencies=common_deps)       # [Phase 2] RAG 业务接口
+app.include_router(rag_router, prefix="/api/v1")                               # [Phase 2] RAG 业务接口 (内部已使用 current_user)
 app.include_router(export_router, prefix="/api/v1", dependencies=common_deps)    # [NEW] 图片导出
-app.include_router(auth_router, prefix="/api/v1")                               # [NEW] 安全认证 (不带通用 Bearer 鉴权，由内部管理)
+app.include_router(auth_router, prefix="/api/v1")                               # [NEW] FastAPI-Users 认证路由 (自带鉴权)
+app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # [NEW] 配置管理路由
+app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # [NEW] AI 绘图
 
 # --- 挂载静态文件 (Frontend) ---
 from fastapi.staticfiles import StaticFiles
@@ -217,6 +299,7 @@ app.mount("/core", StaticFiles(directory=os.path.join(backend_dir, "../frontend/
 # app.mount("/research", StaticFiles(directory=os.path.join(backend_dir, "../frontend/research")), name="research")
 app.mount("/src", StaticFiles(directory=os.path.join(backend_dir, "../frontend/src")), name="src")
 app.mount("/.well-known", StaticFiles(directory=os.path.join(backend_dir, "../frontend/.well-known")), name="well-known")
+app.mount("/fonts", StaticFiles(directory=os.path.join(backend_dir, "../frontend/fonts")), name="fonts")
 
 # [持久化存储] 挂载本地上传目录
 uploads_dir = os.path.join(backend_dir, "data/uploads")

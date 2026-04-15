@@ -114,12 +114,16 @@ def get_llama_storage_context(collection_name: str = "knowledge_base_v2"):
 
 # ─── 核心操作 ───────────────────────────────────────────────────────────────
 
-async def upsert_document(doc: Union[NoteDocument, GalleryDocument]) -> bool:
+async def upsert_document(doc: Union[NoteDocument, GalleryDocument], user_id: str = None) -> bool:
     """
     将文档 upsert 到 ChromaDB
     - 已存在（相同 doc.id）：更新 embedding 和 metadata
     - 不存在：新增
-    
+
+    Args:
+        doc: 文档对象
+        user_id: 用户ID（用于数据隔离）
+
     Returns:
         True: 新增; False: 更新已有文档
     """
@@ -137,6 +141,7 @@ async def upsert_document(doc: Union[NoteDocument, GalleryDocument]) -> bool:
         collection = get_xhs_collection()
         metadata = {
             "doc_id": doc.id,  # [NEW] 显式添加 ID 字段以便于 LlamaIndex 过滤器使用
+            "user_id": user_id or "",  # 用户隔离
             "source_type": doc.source_type,
             "title": doc.title or "",
             "content": doc.content or "",
@@ -155,6 +160,7 @@ async def upsert_document(doc: Union[NoteDocument, GalleryDocument]) -> bool:
         collection = get_gallery_collection()
         metadata = {
             "source_type": doc.source_type,
+            "user_id": user_id or "",  # 用户隔离
             "image_url": doc.image_url or "",
             "visual_description": doc.visual_description[:500] if doc.visual_description else "",
             "rating": doc.rating,
@@ -187,10 +193,10 @@ async def upsert_document(doc: Union[NoteDocument, GalleryDocument]) -> bool:
     return is_new
 
 
-async def get_all_documents(source_type: Optional[str] = None, limit: int = 100, offset: int = 0) -> list[dict]:
-    """获取所有文档（用于后台展示）"""
+async def get_all_documents(source_type: Optional[str] = None, limit: int = 100, offset: int = 0, user_id: str = None) -> list[dict]:
+    """获取所有文档（用于后台展示，支持用户隔离）"""
     results = []
-    
+
     collections_to_query = []
     if source_type in ["xhs_covers", "xhs_covers_v1", "xhs_covers_v2"]:
         collections_to_query = [("xhs_covers", get_xhs_collection())]
@@ -201,14 +207,22 @@ async def get_all_documents(source_type: Optional[str] = None, limit: int = 100,
             ("xhs_covers", get_xhs_collection()),
             ("version_gallery", get_gallery_collection())
         ]
+
+    # 构建 where 过滤条件
+    where_filter = None
+    if user_id:
+        where_filter = {"user_id": user_id}
     
     for coll_name, collection in collections_to_query:
         try:
-            data = collection.get(
-                limit=limit,
-                offset=offset,
-                include=["metadatas", "documents"]
-            )
+            get_kwargs = {
+                "limit": limit,
+                "offset": offset,
+                "include": ["metadatas", "documents"]
+            }
+            if where_filter:
+                get_kwargs["where"] = where_filter
+            data = collection.get(**get_kwargs)
             for i, doc_id in enumerate(data["ids"]):
                 meta = data["metadatas"][i] if data["metadatas"] else {}
                 # 解析 JSON 字段
@@ -251,24 +265,30 @@ async def get_all_documents(source_type: Optional[str] = None, limit: int = 100,
     return results
 
 
-async def update_gallery_metadata(doc_id: str, updates: dict) -> bool:
-    """更新图库文档的元数据 (如 user_tags)"""
+async def update_gallery_metadata(doc_id: str, updates: dict, user_id: str = None) -> bool:
+    """更新图库文档的元数据 (如 user_tags，支持用户隔离)"""
     collection = get_gallery_collection()
     try:
-        existing = collection.get(ids=[doc_id])
+        existing = collection.get(ids=[doc_id], include=["metadatas"])
         if not existing["ids"]:
             return False
-            
-        # 合并 metadata
+
+        # 验证用户权限
         old_meta = existing["metadatas"][0] if existing["metadatas"] else {}
+        doc_user_id = old_meta.get("user_id", "")
+        if user_id and doc_user_id != user_id:
+            print(f"[ChromaStore] ❌ 用户 {user_id} 无权更新文档 {doc_id}")
+            return False
+
+        # 合并 metadata
         new_meta = {**old_meta}
-        
+
         for k, v in updates.items():
             if isinstance(v, (list, dict)):
                 new_meta[k] = json.dumps(v, ensure_ascii=False)
             else:
                 new_meta[k] = v
-                
+
         collection.update(
             ids=[doc_id],
             metadatas=[new_meta]
@@ -337,30 +357,44 @@ async def get_documents_by_ids(doc_ids: list[str]) -> list[dict]:
     return results
 
 
-async def delete_document(doc_id: str) -> bool:
-    """删除文档（从所有 collection 中尝试删除）"""
+async def delete_document(doc_id: str, user_id: str = None) -> bool:
+    """删除文档（从所有 collection 中尝试删除，支持用户隔离）"""
     deleted = False
     for collection in [get_xhs_collection(), get_gallery_collection(), get_knowledge_collection()]:
         try:
-            existing = collection.get(ids=[doc_id])
-            if existing["ids"]:
-                collection.delete(ids=[doc_id])
-                deleted = True
-                print(f"[ChromaStore] 🗑️ 已删除文档: {doc_id}")
+            # 如果提供了 user_id，先验证文档归属
+            if user_id:
+                existing = collection.get(ids=[doc_id], include=["metadatas"])
+                if existing["ids"]:
+                    meta = existing["metadatas"][0] if existing["metadatas"] else {}
+                    doc_user_id = meta.get("user_id", "")
+                    # 只能删除自己的文档
+                    if doc_user_id != user_id:
+                        continue
+                    collection.delete(ids=[doc_id])
+                    deleted = True
+                    print(f"[ChromaStore] 🗑️ 已删除文档: {doc_id}")
+            else:
+                existing = collection.get(ids=[doc_id])
+                if existing["ids"]:
+                    collection.delete(ids=[doc_id])
+                    deleted = True
+                    print(f"[ChromaStore] 🗑️ 已删除文档: {doc_id}")
         except Exception as e:
             pass
     return deleted
 
 
-async def delete_all_documents(source_type: Optional[str] = None) -> int:
+async def delete_all_documents(source_type: Optional[str] = None, user_id: str = None) -> int:
     """
-    全部删除文档
+    删除文档（支持用户隔离）
     :param source_type: 过滤来源: xhs_covers, version_gallery, knowledge_base
+    :param user_id: 用户ID（用于数据隔离）
     :return: 删除的数量
     """
     total_deleted = 0
     collections_to_check = []
-    
+
     if source_type == "xhs_covers":
         collections_to_check = [get_xhs_collection()]
     elif source_type == "version_gallery":
@@ -373,17 +407,25 @@ async def delete_all_documents(source_type: Optional[str] = None) -> int:
 
     for collection in collections_to_check:
         try:
-            count = collection.count()
-            if count > 0:
-                # 获取所有 ID 并删除
-                all_ids = collection.get()["ids"]
-                if all_ids:
-                    collection.delete(ids=all_ids)
-                    total_deleted += len(all_ids)
-                    print(f"[ChromaStore] 🗑️ 已清空集合 {collection.name}, 删除数量: {len(all_ids)}")
+            # 构建过滤条件
+            where_filter = None
+            if user_id:
+                where_filter = {"user_id": user_id}
+
+            # 获取符合条件的文档
+            if where_filter:
+                results = collection.get(where=where_filter, include=["metadatas"])
+            else:
+                results = collection.get(include=["metadatas"])
+
+            ids_to_delete = results.get("ids", [])
+            if ids_to_delete:
+                collection.delete(ids=ids_to_delete)
+                total_deleted += len(ids_to_delete)
+                print(f"[ChromaStore] 🗑️ 已删除集合 {collection.name} 的 {len(ids_to_delete)} 条文档")
         except Exception as e:
-            print(f"[ChromaStore] ❌ 清空集合失败: {e}")
-            
+            print(f"[ChromaStore] ❌ 删除集合文档失败: {e}")
+
     return total_deleted
 
 
@@ -401,7 +443,7 @@ async def clear_collection(collection_name: str):
 
 # ─── 知识库专用操作 ──────────────────────────────────────────────────────────
 
-async def upsert_knowledge_chunks(chunks: list) -> int:
+async def upsert_knowledge_chunks(chunks: list, user_id: str = None) -> int:
     """
     批量写入知识库分块到 ChromaDB（并行 embedding，批次大小 10）
 
@@ -444,6 +486,7 @@ async def upsert_knowledge_chunks(chunks: list) -> int:
             metas.append({
                 "source_type": str(chunk.source_type),
                 "doc_id": str(chunk.doc_id),
+                "user_id": user_id or "",  # 用户隔离
                 "parent_chunk_id": str(chunk.parent_chunk_id or ""),
                 "chunk_type": str(chunk.chunk_type),
                 "page_num": int(chunk.page_num or 0),
@@ -471,18 +514,27 @@ async def upsert_knowledge_chunks(chunks: list) -> int:
     return success_count
 
 
-async def delete_knowledge_document(doc_id: str) -> int:
+async def delete_knowledge_document(doc_id: str, user_id: str = None) -> int:
     """
-    按文档 ID 删除该文档的所有分块
-    
+    按文档 ID 删除该文档的所有分块（支持用户隔离）
+
+    Args:
+        doc_id: 文档ID
+        user_id: 用户ID（用于权限验证）
+
     Returns:
         删除的分块数量
     """
     collection = get_knowledge_collection()
     try:
+        # 构建查询条件
+        where_filter = {"doc_id": doc_id}
+        if user_id:
+            where_filter["user_id"] = user_id
+
         # 查找该文档的所有分块
         results = collection.get(
-            where={"doc_id": doc_id},
+            where=where_filter,
             include=["metadatas"]
         )
         if results["ids"]:
@@ -495,14 +547,21 @@ async def delete_knowledge_document(doc_id: str) -> int:
     return 0
 
 
-async def get_knowledge_documents(limit: int = 100, offset: int = 0, category: str = None) -> list[dict]:
-    """获取知识库文档列表（聚合到文件级）"""
+async def get_knowledge_documents(limit: int = 100, offset: int = 0, category: str = None, user_id: str = None) -> list[dict]:
+    """获取知识库文档列表（聚合到文件级，支持用户隔离）"""
     collection = get_knowledge_collection()
     try:
-        kwargs = {"include": ["metadatas"]}
+        # 构建过滤条件
+        where_filter = {}
         if category:
-            kwargs["where"] = {"category": category}
-        
+            where_filter["category"] = category
+        if user_id:
+            where_filter["user_id"] = user_id
+
+        kwargs = {"include": ["metadatas"]}
+        if where_filter:
+            kwargs["where"] = where_filter
+
         data = collection.get(**kwargs)
         
         # 聚合：按 doc_id 分组
@@ -554,19 +613,27 @@ async def get_parent_chunk(parent_chunk_id: str) -> Optional[dict]:
 
 
 
-async def get_stats() -> dict:
-    """获取知识库统计信息"""
+async def get_stats(user_id: str = None) -> dict:
+    """获取知识库统计信息（支持用户隔离）"""
     try:
-        xhs_count = get_xhs_collection().count()
-        gallery_count = get_gallery_collection().count()
-        knowledge_count = get_knowledge_collection().count()
-        favorites_count = get_favorites_collection().count()
+        # 如果提供了 user_id，需要过滤计数
+        if user_id:
+            where_filter = {"user_id": user_id}
+            xhs_count = len(get_xhs_collection().get(where=where_filter, include=[])["ids"])
+            gallery_count = len(get_gallery_collection().get(where=where_filter, include=[])["ids"])
+            knowledge_count = len(get_knowledge_collection().get(where=where_filter, include=[])["ids"])
+            favorites_count = len(get_favorites_collection().get(where=where_filter, include=[])["ids"])
+        else:
+            xhs_count = get_xhs_collection().count()
+            gallery_count = get_gallery_collection().count()
+            knowledge_count = get_knowledge_collection().count()
+            favorites_count = get_favorites_collection().count()
     except Exception as e:
         xhs_count = 0
         gallery_count = 0
         knowledge_count = 0
         favorites_count = 0
-    
+
     return {
         "total": xhs_count + gallery_count + knowledge_count + favorites_count,
         "xhs_covers": xhs_count,
@@ -634,11 +701,20 @@ async def vector_search(
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:top_k]
 
-async def get_favorite_images(limit: int = 100) -> list[dict]:
-    """获取收藏图片列表"""
+async def get_favorite_images(limit: int = 100, user_id: str = None) -> list[dict]:
+    """获取收藏图片列表（支持用户隔离）"""
     collection = get_favorites_collection()
     try:
-        data = collection.get(limit=limit, include=["metadatas"])
+        # 构建查询条件
+        where_filter = None
+        if user_id:
+            where_filter = {"user_id": user_id}
+
+        get_kwargs = {"limit": limit, "include": ["metadatas"]}
+        if where_filter:
+            get_kwargs["where"] = where_filter
+
+        data = collection.get(**get_kwargs)
         results = []
         for i, doc_id in enumerate(data["ids"]):
             meta = data["metadatas"][i] if data["metadatas"] else {}
@@ -656,14 +732,19 @@ async def get_favorite_images(limit: int = 100) -> list[dict]:
         return []
 
 
-async def upsert_favorite_image(img_id: str, metadata: dict) -> bool:
-    """收藏/更新图片"""
+async def upsert_favorite_image(img_id: str, metadata: dict, user_id: str = None) -> bool:
+    """收藏/更新图片（支持用户隔离）"""
     collection = get_favorites_collection()
     try:
+        # 添加 user_id 到 metadata
+        meta = {**metadata}
+        if user_id:
+            meta["user_id"] = user_id
+
         # 图片收藏由于量不大且主要用于展示，暂时不走向量化，仅存储元数据
         collection.upsert(
             ids=[img_id],
-            metadatas=[metadata],
+            metadatas=[meta],
             documents=["[favorited_image]"] # 占位符
         )
         return True
@@ -672,10 +753,20 @@ async def upsert_favorite_image(img_id: str, metadata: dict) -> bool:
         return False
 
 
-async def delete_favorite_image(img_id: str) -> bool:
-    """取消收藏图片"""
+async def delete_favorite_image(img_id: str, user_id: str = None) -> bool:
+    """取消收藏图片（支持用户隔离）"""
     collection = get_favorites_collection()
     try:
+        # 如果提供了 user_id，先验证权限
+        if user_id:
+            existing = collection.get(ids=[img_id], include=["metadatas"])
+            if existing["ids"]:
+                meta = existing["metadatas"][0] if existing["metadatas"] else {}
+                doc_user_id = meta.get("user_id", "")
+                if doc_user_id != user_id:
+                    print(f"[ChromaStore] ❌ 用户 {user_id} 无权删除收藏 {img_id}")
+                    return False
+
         collection.delete(ids=[img_id])
         return True
     except Exception as e:

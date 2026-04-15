@@ -1,7 +1,33 @@
 (function () {
     const { React } = window;
-    const { X, Trash2 } = window.MagnesComponents.UI.Icons;
     const { ConversationPanel } = window.MagnesComponents.UI;
+    // 安全获取图标函数，与 ConversationPanel 保持一致
+    const getIcons = () => window.MagnesComponents?.UI?.LucideIcons || window.MagnesComponents?.UI?.Icons || {};
+
+    /**
+     * AssetPicker 渲染器 - 作为独立组件避免 IIFE 在 JSX 中的问题
+     */
+    const AssetPickerRenderer = ({ getAssetPicker, assetPickerReady, onAssetSelect }) => {
+        const AP = getAssetPicker();
+        console.log('[RightSidebar] Rendering AssetPicker:', { assetPickerReady, APExists: !!AP, APType: typeof AP });
+
+        if (!assetPickerReady) {
+            return React.createElement('div', { className: 'p-8 text-center text-zinc-400 text-[10px]' }, 'AssetPicker Not Ready...');
+        }
+        if (!AP) {
+            return React.createElement('div', { className: 'p-8 text-center text-zinc-400 text-[10px]' }, 'AssetPicker Not Found...');
+        }
+        if (typeof AP !== 'function') {
+            console.error('[RightSidebar] ❌ AssetPicker is not a function:', AP);
+            return React.createElement('div', { className: 'p-8 text-center text-red-400 text-[10px]' }, 'AssetPicker Invalid Type');
+        }
+
+        console.log('[RightSidebar] ✅ Creating AssetPicker element');
+        return React.createElement(AP, {
+            isSidebar: true,
+            onSelect: onAssetSelect
+        });
+    };
 
     /**
      * 右侧统一侧边栏组件
@@ -36,13 +62,83 @@
         setActiveFlowItem,
         setRetrievalStats,
         selectedDocIds,
-        startGeneration
+        startGeneration,
+        // 侧边栏资产相关
+        prevTab,
+        onAssetSelect
     }) => {
         const h = React.createElement;
+        const MAGNES = window.MagnesComponents || {};
+        const UI = MAGNES.UI || {};
+        // 安全获取图标，与 ConversationPanel 保持一致
+        const Icons = getIcons();
+        // 注意：Lucide 图标库中只有 ArrowLeft，没有 ChevronLeft
+        const ArrowLeft = Icons.ArrowLeft;
+        const X = Icons.X;
+        const Trash2 = Icons.Trash2;
+
+        // [FIX] 动态获取 AssetPicker，确保在组件渲染时获取最新引用
+        const getAssetPicker = () => window.MagnesComponents?.UI?.AssetPicker;
+        const [assetPickerReady, setAssetPickerReady] = React.useState(false);
+
+        // [DEBUG] 追踪侧边栏状态切换
+        React.useEffect(() => {
+            console.log('[RightSidebar] 🔄 侧边栏状态更新:', { activeTab, sidebarCollapsed });
+        }, [activeTab, sidebarCollapsed]);
+
+        // 等待 AssetPicker 加载完成 - 增加重试次数和延迟
+        React.useEffect(() => {
+            let attempts = 0;
+            const maxAttempts = 50; // 最多等待 5 秒
+
+            const checkAssetPicker = () => {
+                attempts++;
+                const AP = getAssetPicker();
+                console.log(`[RightSidebar] ⏳ Check attempt ${attempts}, AP:`, typeof AP);
+
+                if (AP && typeof AP === 'function') {
+                    setAssetPickerReady(true);
+                    console.log('[RightSidebar] ✅ AssetPicker Ready');
+                } else if (attempts < maxAttempts) {
+                    setTimeout(checkAssetPicker, 100);
+                } else {
+                    console.error('[RightSidebar] ❌ AssetPicker failed to load after max attempts');
+                }
+            };
+            // 延迟开始检查，确保其他脚本先执行
+            setTimeout(checkAssetPicker, 100);
+        }, []);
+
+        // 规范化比较
+        const isAssetsTab = String(activeTab).toLowerCase() === 'assets';
 
         return (
             <div className={`${sidebarCollapsed ? 'w-8' : 'w-[320px]'} border-l border-black flex flex-col bg-white shrink-0 relative overflow-hidden transition-all duration-300`}>
-                {activeTab === 'canvas' ? (
+                {isAssetsTab ? (
+                    <div className="flex flex-col h-full bg-white">
+                        {/* Assets Header */}
+                        <div className="px-4 py-3 border-b border-black flex items-center gap-2 bg-white shrink-0">
+                            <button
+                                onClick={() => setActiveTab(prevTab || 'canvas')}
+                                className="hover:bg-zinc-100 transition-colors flex items-center justify-center w-7 h-7"
+                            >
+                                {ArrowLeft
+                                    ? React.createElement(ArrowLeft, { size: 14 })
+                                    : '←'
+                                }
+                            </button>
+                            <span className="font-black text-[12px] uppercase tracking-widest text-black">选择背景素材</span>
+                        </div>
+                        {/* AssetPicker Sidebar Mode */}
+                        <div className="flex-1 overflow-hidden">
+                            {React.createElement(AssetPickerRenderer, {
+                                getAssetPicker: getAssetPicker,
+                                assetPickerReady: assetPickerReady,
+                                onAssetSelect: onAssetSelect
+                            })}
+                        </div>
+                    </div>
+                ) : activeTab === 'canvas' ? (
                     <React.Fragment>
                         <ConversationPanel
                             messages={messages}
@@ -162,14 +258,14 @@
                             <div className="absolute inset-0 bg-white z-40 flex flex-col">
                                 <div className="px-6 py-4 border-b-2 border-black flex justify-between items-center bg-white">
                                     <span className="font-bold text-[12px] uppercase text-black">生成历史 [{historyList.length}]</span>
-                                    <button onClick={() => setHistoryOpen(false)}><X size={18} /></button>
+                                    <button onClick={() => setHistoryOpen(false)}>{X ? React.createElement(X, { size: 18 }) : '×'}</button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto bg-zinc-50 p-4 space-y-4">
                                     {historyList.map(item => (
                                         <div key={item.id} className="p-4 bg-white border border-black group">
                                             <div className="flex justify-between mb-2">
                                                 <span className="text-[10px] font-bold border border-black px-1 uppercase">{item.status}</span>
-                                                <button onClick={() => deleteHistory(item.id)} className="opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+                                                <button onClick={() => deleteHistory(item.id)} className="opacity-0 group-hover:opacity-100">{Trash2 ? React.createElement(Trash2, { size: 12 }) : '🗑'}</button>
                                             </div>
                                             {item.url && <img src={item.url} className="w-full mb-2 border border-black/5 cursor-pointer" onClick={() => setLightboxItem({ url: item.url, prompt: item.prompt })} />}
                                             <p className="text-[11px] text-zinc-500 line-clamp-2 font-medium">{item.prompt}</p>

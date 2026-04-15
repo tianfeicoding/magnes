@@ -57,6 +57,9 @@
         // 1. 状态管理 (改为从后端获取)
         const [savedStyles, setSavedStyles] = useState([]);
         const [isLoading, setIsLoading] = useState(false);
+        const [editingStyleId, setEditingStyleId] = useState(null);
+        const [tempName, setTempName] = useState('');
+
         const { Constants } = window.MagnesComponents.Utils || {};
         const backendBaseUrl = Constants?.MAGNES_API_URL || (window.location.protocol === 'file:' ? 'http://localhost:8088/api/v1' : '/api/v1');
 
@@ -140,6 +143,41 @@
             }
         }, [inputData, selectedStyleId, savedStyles]); // 去掉 applyTemplate 避免循环，或确保其 stable
 
+        // 4. 重命名逻辑
+        const handleRename = async (styleId, newName) => {
+            if (!newName || newName.trim() === '') {
+                setEditingStyleId(null);
+                return;
+            }
+
+            // 如果名称没变，直接关闭
+            const original = savedStyles.find(s => s.id === styleId);
+            if (original && original.name === newName.trim()) {
+                setEditingStyleId(null);
+                return;
+            }
+
+            try {
+                const API = window.MagnesComponents?.Utils?.API;
+                const res = await API.magnesFetch('/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: styleId,
+                        name: newName.trim()
+                    })
+                });
+                if (res.ok) {
+                    // 本地立即更新 UI，提升响应感
+                    setSavedStyles(prev => prev.map(s => s.id === styleId ? { ...s, name: newName.trim() } : s));
+                }
+            } catch (err) {
+                console.error('[TemplateNode] Rename failed:', err);
+            } finally {
+                setEditingStyleId(null);
+            }
+        };
+
         // 4. UI 交互
         const removeStyle = async (e, styleId) => {
             e.stopPropagation();
@@ -188,15 +226,8 @@
                 </div>
 
                 <div className="flex flex-col gap-4">
-                    {/* 状态指示器隐藏 */}
-                    {/* <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                            {inputData ? '✅ 已连接图文输入' : '⚠️ 等待输入连接'}
-                        </span>
-                    </div> */}
-
                     {/* 模版列表列表 */}
-                    <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-1">
+                    <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                         {savedStyles.length > 0 ? (
                             savedStyles.map((style) => (
                                 <div
@@ -205,26 +236,38 @@
                                     className={`p-3 border transition-all cursor-pointer group relative
                                         ${selectedStyleId === style.id
                                             ? 'border-black bg-zinc-50'
-                                            : 'border-black hover:bg-zinc-50'}`}
+                                            : 'border-zinc-100 hover:border-black hover:bg-zinc-50'}`}
                                 >
                                     <div className="flex flex-col gap-1">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[12px] font-black truncate max-w-[180px]">
-                                                {style.name}
-                                            </span>
+                                            {editingStyleId === style.id ? (
+                                                <input
+                                                    autoFocus
+                                                    className="text-[12px] font-black w-full bg-white border-b border-black outline-none px-0 py-0"
+                                                    value={tempName}
+                                                    onChange={(e) => setTempName(e.target.value)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onBlur={() => handleRename(style.id, tempName)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleRename(style.id, tempName);
+                                                        if (e.key === 'Escape') setEditingStyleId(null);
+                                                    }}
+                                                />
+                                            ) : (
+                                                <span
+                                                    className="text-[12px] font-black truncate max-w-[180px] hover:bg-black/5 rounded px-1 -ml-1 transition-colors"
+                                                    title="点击修改名称"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingStyleId(style.id);
+                                                        setTempName(style.name);
+                                                    }}
+                                                >
+                                                    {style.name}
+                                                </span>
+                                            )}
                                             {selectedStyleId === style.id && <Check size={14} className="text-black" />}
                                         </div>
-                                        {/* 隐藏 Refined 那一行 */}
-                                        {/* <div className="flex items-center gap-2">
-                                            <div className="flex -space-x-[1px]">
-                                                {Object.values(style.atoms?.palette || {}).slice(0, 3).map((c, i) => (
-                                                    <div key={i} className="w-3 h-3 border border-black/20" style={{ backgroundColor: c }}></div>
-                                                ))}
-                                            </div>
-                                            <span className="text-[9px] font-bold text-zinc-400 uppercase">
-                                                {style.metadata?.source === 'fine-tune-node' ? 'Refined' : 'Preset'}
-                                            </span>
-                                        </div> */}
                                     </div>
 
                                     {/* 悬浮删除 */}
@@ -246,8 +289,12 @@
 
                     {/* 底部提示 */}
                     {selectedStyleId && (
-                        <div className="bg-black py-2 text-center">
-                            <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">模版已应用 - 请查看精细编辑节点</span>
+                        <div className="bg-black -mx-4 -mb-4 h-10 flex items-center justify-center">
+                            <div className="text-[10px] font-black text-white uppercase px-2">
+                                {inputData?.items?.length > 1
+                                    ? "模版已锁定 · 正在同步批量内容"
+                                    : "模版已应用"}
+                            </div>
                         </div>
                     )}
                 </div>

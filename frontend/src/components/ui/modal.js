@@ -34,7 +34,7 @@
                 onClick={onClose}
             >
                 <div
-                    className={`shadow-2xl w-[680px] max-w-[95vw] overflow-hidden flex flex-col max-h-[90vh] border ${isDark ? 'bg-[#000000] border-zinc-800' : 'bg-white border-zinc-200'}`}
+                    className={`shadow-2xl w-[500px] max-w-[95vw] overflow-hidden flex flex-col max-h-[90vh] border ${isDark ? 'bg-[#000000] border-zinc-800' : 'bg-white border-zinc-200'}`}
                     style={{ borderRadius: '0px' }} // Precision Monochrome: 0px radius
                     onClick={(e) => e.stopPropagation()}
                 >

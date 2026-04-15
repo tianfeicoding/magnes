@@ -330,8 +330,16 @@
 
                 const response = await API.magnesFetch('/tasks/run', {
                     method: 'POST',
+                    triggerLogin: true, // 用户主动点击生图时触发登录弹窗
                     body: JSON.stringify(requestBody)
                 });
+
+                // 处理认证错误
+                if (response.status === 401 || response.status === 403) {
+                    console.warn('[GenerationService] 🔒 认证失败，需要登录');
+                    throw new Error('请先登录后再使用生图功能');
+                }
+
                 const startData = await response.json();
                 if (!response.ok) throw new Error(startData.detail || 'Failed to start task');
 
@@ -541,7 +549,8 @@
             } catch (error) {
                 console.error('Generation Error', error);
                 if (onHistoryUpdate) {
-                    onHistoryUpdate({ id: taskId, status: 'failed', errorMsg: error.message }, 'update');
+                    // 使用 nodeId 作为临时 ID，因为 taskId 可能未定义
+                    onHistoryUpdate({ id: taskId || `temp_${nodeId}_${Date.now()}`, status: 'failed', errorMsg: error.message }, 'update');
                 }
                 if (onNodeUpdate) {
                     onNodeUpdate(nodeId, { isGenerating: false });

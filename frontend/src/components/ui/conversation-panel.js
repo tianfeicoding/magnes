@@ -921,6 +921,7 @@
                 const cleanEndpoint = apiEndpoint.replace('/api/v1', '');
                 const response = await API.magnesFetch(cleanEndpoint, {
                     method: 'POST',
+                    triggerLogin: true, // 用户主动发送消息时触发登录弹窗
 
                     body: JSON.stringify({
                         message: text,
@@ -936,6 +937,14 @@
                 });
 
                 if (!response.ok) {
+                    // 处理认证错误：401/403 触发登录弹窗
+                    if (response.status === 401 || response.status === 403) {
+                        console.warn('[ConversationPanel] 🔒 认证失败，触发登录弹窗');
+                        window.dispatchEvent(new CustomEvent('magnes:open_login', {
+                            detail: { reason: 'auth_required', message: '请先登录后再使用对话功能' }
+                        }));
+                        throw new Error('请先登录');
+                    }
                     throw new Error(`HTTP ${response.status}`);
                 }
 

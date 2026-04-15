@@ -281,7 +281,7 @@
                     }, h(Icons.Send || Icons.Zap || 'span', { size: 11 }))
                 )
             ),
-            h('div', { className: 'text-[12px] font-bold leading-relaxed mb-4 pr-4' }, doc.prompt || '未命名提示词'),
+            h('div', { className: 'text-[12px] font-bold leading-relaxed mb-4' }, doc.prompt || '未命名提示词'),
 
             h('div', { className: 'flex flex-wrap gap-1.5 mb-14' },
                 h('span', { className: 'px-2 py-0.5 bg-zinc-100 border border-black text-[10px] font-bold text-black uppercase' }, `#${doc.model_used || 'AI'}`),
