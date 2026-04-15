@@ -119,7 +119,7 @@
                                     } catch (e) { /* 不是合法的 JSON 或截断了 */ }
                                 }
 
-                                // [FIX] 避免 unpackedData 中的 style_evolution 覆盖 updates 中的
+                                // 避免 unpackedData 中的 style_evolution 覆盖 updates 中的
                                 // updates 包含服务器返回的最新数据，优先级应该最高
                                 if (unpackedData.style_evolution && updates.style_evolution) {
                                     console.log('[useGenerationService] 跳过 unpackedData.style_evolution，使用 updates.style_evolution:', {

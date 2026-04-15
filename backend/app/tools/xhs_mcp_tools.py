@@ -29,10 +29,11 @@ class XHSMCPTools:
                 resp.raise_for_status()
                 data = resp.json()
                 
-                # 兼容性检查
+                # 兼容性检查：有些环境下 data=["data"] 可能不存在或为 None
                 content_data = data.get("data")
                 if data.get("success") and content_data:
                     feeds = content_data.get("feeds") or []
+                    # 映射为 rag_routes 期望的简易格式
                     results = []
                     for f in feeds:
                         if not f: continue
@@ -41,6 +42,7 @@ class XHSMCPTools:
                         cover = card.get("cover") or {}
                         cover_url = cover.get("url") or cover.get("urlDefault") or cover.get("urlPre") or card.get("image") or ""
                         
+                        # 转换 count 为整数
                         def to_int(v):
                             try: return int(v) if v else 0
                             except: return 0

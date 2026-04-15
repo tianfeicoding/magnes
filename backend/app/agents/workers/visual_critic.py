@@ -182,7 +182,7 @@ async def run_visual_critic(
             - "clone": 还原模式，评估与原图的相似度
             - "evolution": 创作模式，评估风格传承和创意质量
     """
-    # [FIX] 截断 ref_image_url，避免将完整base64放入prompt
+    # 截断 ref_image_url，避免将完整base64放入prompt
     if ref_image_url:
         url_log = ref_image_url[:50] + "..." if len(ref_image_url) > 50 else ref_image_url
         ref_context = f"参考原图已提供: {url_log}"
@@ -215,7 +215,7 @@ async def run_visual_critic(
         url_preview = url[:50] + "..." if url and len(url) > 50 else url
         print(f"  - 图{i+1}: {url_preview}")
 
-    # [FIX] 将图片转为base64格式，避免API无法下载图片的问题
+    # 将图片转为base64格式，避免API无法下载图片的问题
     print(f"[VisualCritic] 正在将图片转为base64格式...")
     base64_urls = []
     for i, url in enumerate(image_urls):
@@ -239,7 +239,7 @@ async def run_visual_critic(
         try:
             from app.tools.visual_analyzer import extract_json_from_md
             data = extract_json_from_md(content)
-            # [FIX] 截断打印，避免输出过长
+            # 截断打印，避免输出过长
             data_log = str(data)[:300] + "..." if data and len(str(data)) > 300 else data
             print(f"[VisualCritic] JSON提取结果: {data_log}")
             if data:

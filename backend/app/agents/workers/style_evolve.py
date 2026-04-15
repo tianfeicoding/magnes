@@ -122,10 +122,10 @@ async def style_evolve_node(state: MagnesState):
     # 4. 构造演化记录
     existing_evolution = state.get("style_evolution", [])
 
-    # [FIX] 如果没有 V0，自动创建（从原图提取的初始版本）
+    # 如果没有 V0，自动创建（从原图提取的初始版本）
     if not existing_evolution:
         print("[Style Evolve] 未检测到版本历史，自动创建 V0（原始提取）")
-        # [FIX] 优先从 intent 获取原图 URL，其次从 visual_assets 获取
+        # 优先从 intent 获取原图 URL，其次从 visual_assets 获取
         source_image = intent.get("image_url")
         if not source_image and state.get("visual_assets"):
             source_image = state.get("visual_assets", [])[0]
@@ -204,7 +204,7 @@ async def style_evolve_node(state: MagnesState):
     current_eval_mode = state.get("evaluation_mode", "evolution")
     current_run_style_critic = state.get("run_style_critic", False)
 
-    # [FIX] 返回完整的演化历史（包括 V0 和新创建的 V1）
+    # 返回完整的演化历史（包括 V0 和新创建的 V1）
     final_evolution = existing_evolution + [evolution_entry]
     print(f"[Style Evolve] 返回完整版本历史: {len(final_evolution)} 条, 版本: {[e.get('version') for e in final_evolution]}")
 
@@ -212,10 +212,10 @@ async def style_evolve_node(state: MagnesState):
         "style_prompt": new_prompt,  # 兼容旧版：中文提示词
         "prompt_text_zh": new_prompt_zh,  # 中文提示词（给用户看）
         "prompt_text_en": new_prompt_en,  # 英文提示词（给生图模型）
-        "style_evolution": final_evolution,  # [FIX] 返回完整的演化历史（V0 + V1 + ...）
+        "style_evolution": final_evolution,  # 返回完整的演化历史（V0 + V1 + ...）
         "current_step": "style_evolve_completed",
         "evolved_version": new_version,  # 记录当前版本号，供painter使用
         "evaluation_mode": current_eval_mode,  # 确保评分模式被传递
-        "run_style_critic": current_run_style_critic,  # [FIX] 确保验证模式标记被传递
-        "intent": state.get("intent")  # [FIX] 传递 intent，确保后续节点可以获取原图 URL
+        "run_style_critic": current_run_style_critic,  # 确保验证模式标记被传递
+        "intent": state.get("intent")  # 传递 intent，确保后续节点可以获取原图 URL
     }

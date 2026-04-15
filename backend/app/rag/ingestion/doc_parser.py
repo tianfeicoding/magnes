@@ -394,7 +394,7 @@ def parse_docx(file_path: str) -> ParsedDocument:
     def _extract_images_from_element(element, current_heading, current_page):
         """内部辅助函数：从任意 XML 元素中提取图片"""
         from lxml import etree
-        # [FIX] python-docx 的 BaseOxmlElement 不直接支持 namespaces 参数，改用 lxml 原生方法
+        # python-docx 的 BaseOxmlElement 不直接支持 namespaces 参数，改用 lxml 原生方法
         xpath_str = './/a:blip/@r:embed | .//v:imagedata/@r:id | .//pic:blipFill/a:blip/@r:embed'
         try:
             rIds = element.xpath(xpath_str, namespaces=DOCX_NSMAP)
@@ -494,7 +494,7 @@ def parse_docx(file_path: str) -> ParsedDocument:
                                     current_content.append(cell_text)
                                     full_text_parts.append(cell_text)
                             
-                            # [FIX] 表格单元格内图片提取
+                            # 表格单元格内图片提取
                             _extract_images_from_element(cell_block._p, current_heading, 1)
                     # 记录单元格内容用于表格 MD (可选，先保文字)
                     row_cells_content.append(cell.text.strip())

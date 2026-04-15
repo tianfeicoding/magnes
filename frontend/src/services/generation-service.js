@@ -459,7 +459,7 @@
                                             uData.background_color = parsed.background_color;
                                         } catch (e) { console.error('Style Parse Error', e); }
                                     } else if (type === 'style_evolve') {
-                                        // [FIX] 解析 style_evolve 返回的 JSON，提取 style_prompt 和 style_evolution
+                                        // 解析 style_evolve 返回的 JSON，提取 style_prompt 和 style_evolution
                                         try {
                                             const parsed = JSON.parse(update.content);
                                             uData.style_prompt = parsed.style_prompt;

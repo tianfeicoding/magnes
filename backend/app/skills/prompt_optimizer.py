@@ -82,7 +82,7 @@ def save_golden_prompt(
         "prompt": prompt,
         "image_url": image_url,
         "visual_features": visual_features or "",
-        "user_tags": [], # [NEW] 用户自定义标签
+        "user_tags": [], #用户自定义标签
         "source": source,
         "model_used": model_used,
         "saved_at": datetime.now(timezone.utc).isoformat(),

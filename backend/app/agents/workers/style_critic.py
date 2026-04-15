@@ -37,7 +37,7 @@ async def style_critic_node(state: MagnesState):
     ref_image_log = ref_image[:50] + "..." if ref_image and len(ref_image) > 50 else ref_image
     print(f"[Style Critic DEBUG] ref_image from intent: {ref_image_log}")
 
-    # [FIX] 如果 intent 中没有 image_url，尝试从 style_evolution V0 获取
+    # 如果 intent 中没有 image_url，尝试从 style_evolution V0 获取
     if not ref_image:
         style_evolution = state.get("style_evolution", [])
         print(f"[Style Critic DEBUG] Trying style_evolution, length: {len(style_evolution)}")
@@ -79,5 +79,5 @@ async def style_critic_node(state: MagnesState):
         "current_step": "style_critic_completed",
         "evolution_count": 1,  # 触发计数器自增
         "evaluation_mode": evaluation_mode,  # 确保评分模式被传递
-        "style_evolution": evolution_to_return  # [FIX] 保留 style_evolution
+        "style_evolution": evolution_to_return  # 保留 style_evolution
     }

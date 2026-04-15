@@ -64,7 +64,7 @@ async def create_workflow():
 
         for entry in current_evolution:
             if entry.get("version") == version_to_update:
-                # [FIX] 同时更新 generated_image 和 critic_report
+                # 同时更新 generated_image 和 critic_report
                 updated_entry = {**entry, "generated_image": generated_image}
                 if critic_report:
                     updated_entry["critic_report"] = critic_report
@@ -76,13 +76,13 @@ async def create_workflow():
                 updated_evolution.append(entry)
 
         # 返回更新后的 style_evolution（使用 replace 策略，不是 add）
-        # [FIX] 同时传递 visual_assets 和 run_style_critic，确保 style_critic 可以正常工作
+        # 同时传递 visual_assets 和 run_style_critic，确保 style_critic 可以正常工作
         result = {
             "style_evolution": updated_evolution,
             "style_evolution_update": None,  # 清空标记
             "visual_assets": state.get("visual_assets", []),  # 传递 visual_assets
-            "run_style_critic": state.get("run_style_critic", False),  # [FIX] 确保验证模式标记被传递
-            "intent": state.get("intent")  # [FIX] 传递 intent，确保 style_critic 可以获取原图 URL
+            "run_style_critic": state.get("run_style_critic", False),  # 确保验证模式标记被传递
+            "intent": state.get("intent")  # 传递 intent，确保 style_critic 可以获取原图 URL
         }
         print(f"[Workflow DEBUG] process_evolution_update_node returning: style_evolution_len={len(updated_evolution)}, versions={[e.get('version') for e in updated_evolution]}")
         return result
@@ -142,7 +142,7 @@ async def create_workflow():
     # - 如果需要 style_evolve（验证模式或纯优化模式），先去 style_evolve
     # - 否则：需要 painter 的去 painter，否则去 composer
     def route_after_slicer(state: MagnesState):
-        # [FIX] 验证模式：先执行 style_evolve，再执行 painter
+        # 验证模式：先执行 style_evolve，再执行 painter
         if state.get("run_style_evolve"):
             print("[Workflow] 检测到 Style Evolve，进入演化节点")
             return "style_evolve"
@@ -157,7 +157,7 @@ async def create_workflow():
         "slicer",
         route_after_slicer,
         {
-            "style_evolve": "style_evolve",  # [FIX] 新增演化路径
+            "style_evolve": "style_evolve",  # 新增演化路径
             "painter": "painter",
             "composer": "composer"
         }

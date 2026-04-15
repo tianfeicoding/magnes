@@ -51,6 +51,6 @@ async def slicer_node(state: MagnesState):
     return {
         "visual_assets": images,
         "current_step": "slicing_completed",
-        "style_evolution": state.get("style_evolution", []),  # [FIX] 保留 style_evolution
-        "intent": state.get("intent")  # [FIX] 保留 intent，确保后续节点能获取原图 URL
+        "style_evolution": state.get("style_evolution", []),  # 保留 style_evolution
+        "intent": state.get("intent")  # 保留 intent，确保后续节点能获取原图 URL
     }

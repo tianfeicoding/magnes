@@ -20,5 +20,5 @@ async def reviewer_node(state: MagnesState):
     return {
         "current_step": "reviewing_completed",
         "is_completed": True,
-        "style_evolution": state.get("style_evolution", [])  # [FIX] 保留 style_evolution
+        "style_evolution": state.get("style_evolution", [])  # 保留 style_evolution
     }

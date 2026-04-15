@@ -40,7 +40,7 @@ async def extract_from_gallery(version_data: dict) -> GalleryDocument:
     skill_name = version_data.get("skill_name") or version_data.get("skill", "")
     generation_params = version_data.get("params") or version_data.get("generation_params", {})
     
-    # [NEW] 提取新字段
+    # 提取新字段
     user_tags = version_data.get("user_tags", [])
     group_id = version_data.get("group_id") or version_data.get("node_id", "")
     prompt = version_data.get("prompt", "")

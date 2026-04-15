@@ -362,7 +362,7 @@
                 const trimmed = line.trim();
                 if (!trimmed) return;
 
-                // [Fix] 识别活动标题：不再排除数字 (解决 "搞事市集vol.7" 问题)
+                // 识别活动标题：不再排除数字 (解决 "搞事市集vol.7" 问题)
                 // 逻辑：首行、加粗或较短行，且不含冒号（冒号通常引导详情）
                 const isTitleCandidate = /^\s*(\*\*|#|•|-)?\s*.{2,30}?\s*(\*\*)?\s*$/.test(trimmed) &&
                     !trimmed.includes(':') && !trimmed.includes('：') && 
@@ -395,9 +395,11 @@
                     const noteNum = numMatch[0];
                     const rawDetail = match[2] || '';
 
+                    // 拆分复合详情：如 "图片1, 第5行" -> ["图片1", "第5行"]
                     const details = rawDetail.split(/[,，\s]+/).filter(d => d.trim());
                     if (details.length === 0) details.push('正文');
 
+                    // 寻找或创建对应的 section
                     const sectionName = currentActivity || '参考信息';
                     let section = currentResults.find(r => r.section === sectionName);
                     if (!section) {

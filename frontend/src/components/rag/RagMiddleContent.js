@@ -45,8 +45,8 @@
         setXhsView,
         xhsGroupedTimeline,
         promptDocs, // 增加接收提示词数据
-        deletePrompt, // [NEW] 提示词删除
-        updatePromptTags // [NEW] 提示词打标
+        deletePrompt, // 提示词删除
+        updatePromptTags // 提示词打标
     }) => {
         const h = React.createElement;
 

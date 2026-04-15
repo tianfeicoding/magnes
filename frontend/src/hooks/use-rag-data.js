@@ -204,7 +204,7 @@
 
         // 监听页签切换，自动重置当前分类为对应页签的第一个分类，并重置 RAG 流程状态
         useEffect(() => {
-            // [FIX] 切换页签时，重置 RAG 流程状态和选择状态，避免 UI 残留
+            // 切换页签时，重置 RAG 流程状态和选择状态，避免 UI 残留
             setActiveFlowItem('docs');
             setSelectedDocId(null);
             setSelectedDocIds([]);
@@ -217,7 +217,7 @@
         // 面板切换或初始化时加载数据
         useEffect(() => {
             if (activeTab === 'canvas') return;
-            loadStats(); loadKb(); loadGallery(); loadXhs(); // [FIX] 增加 loadXhs()
+            loadStats(); loadKb(); loadGallery(); loadXhs(); // 增加 loadXhs()
 
             // 如果是灵感库下的收藏图片分类，单独加载
             if (activeTab === 'xhs' && kbCategory === '收藏图片') {
@@ -237,7 +237,7 @@
                 };
                 loadFavs();
             } else if (activeTab === 'xhs') {
-                loadXhs(); // [FIX] 确保非收藏夹场景也加载
+                loadXhs(); // 确保非收藏夹场景也加载
             } else if (activeTab === 'gallery') {
                 loadGallery();
                 loadPrompts();

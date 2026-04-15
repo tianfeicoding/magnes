@@ -117,7 +117,7 @@ async def painter_node(state: MagnesState):
         print("[AI Painter] ⚠️ 警告：既无 Prompt 也无 Base Image，将跳过")
         return {"current_step": "painter_skipped"}
 
-    # [FIX] 获取原图尺寸以保持比例
+    # 获取原图尺寸以保持比例
     image_size = "1024x1024"  # 默认方图
     if base_image:
         img_size = await get_image_size(base_image)
@@ -179,7 +179,7 @@ async def painter_node(state: MagnesState):
         "current_step": "painter_completed",
         "style_evolution_update": style_evolution_update,  # 标记需要更新版本
         "evaluation_mode": current_eval_mode,  # 确保评分模式被传递
-        "run_style_critic": current_run_style_critic,  # [FIX] 确保验证模式标记被传递
-        "style_evolution": state.get("style_evolution", []),  # [FIX] 保留 style_evolution
-        "intent": state.get("intent")  # [FIX] 传递 intent，确保 style_critic 可以获取原图 URL
+        "run_style_critic": current_run_style_critic,  # 确保验证模式标记被传递
+        "style_evolution": state.get("style_evolution", []),  # 保留 style_evolution
+        "intent": state.get("intent")  # 传递 intent，确保 style_critic 可以获取原图 URL
     }

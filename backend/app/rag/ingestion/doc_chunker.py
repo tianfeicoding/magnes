@@ -428,7 +428,7 @@ async def chunk_document_with_llama(
             img_h = img.section_heading.strip()
             node_h = heading.strip()
             if img.image_id not in processed_image_ids and (img_h == node_h or node_h in img_h or img_h in node_h):
-                # [FIX] 无论是否有描述，都必须创建父分块展示“视觉原文”
+                # 无论是否有描述，都必须创建父分块展示“视觉原文”
                 parent_img_id = f"{doc_id}_img_p_{i}_{seq_num}"
                 node_chunks.append(KnowledgeChunk(
                     chunk_id=parent_img_id,

@@ -307,7 +307,7 @@ async def analyze_visual_style(prompt: str, image_urls: List[str], model: str = 
     # 统一获取 LLM 配置（已包含用户设置的数据库配置）
     base_url, api_key = await llm_config.get_llm_config(db=db)
 
-    # [FIX] 不再覆盖 base_url，使用 get_llm_config 返回的值（已包含用户设置）
+    # 不再覆盖 base_url，使用 get_llm_config 返回的值（已包含用户设置）
     # 只需确保格式正确
     base_url = base_url.rstrip('/')
     if not base_url.endswith('/v1'):

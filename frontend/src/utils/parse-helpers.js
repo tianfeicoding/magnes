@@ -46,7 +46,7 @@
             if (newBlocks.length > 1) blocks = newBlocks;
 
             return blocks.map(block => {
-                // [Fix] 不再直接改写 block 原始变量，以保留 rawBlock 中的 [[笔记N]] 溯源元数据
+                // 不再直接改写 block 原始变量，以保留 rawBlock 中的 [[笔记N]] 溯源元数据
                 const cleanBlock = block.replace(/\[\[笔记\d+[^\]]*\]\]/g, '').trim();
 
                 const lines = cleanBlock.split('\n')

@@ -109,10 +109,7 @@
             };
 
             let textContent = activityContent || activityPrompt || '';
-            
-            // [Fix] 移除之前的全局物理替换逻辑。
-            // 理由：直接 replace 会导致 [[笔记1]] 这种元数据永久丢失，从而破坏“来源”按钮的引用回溯功能。
-            // 净化工作已下沉到各字段的提取器中（parse-helpers.js），确保 UI 干净的同时数据链路完整。
+    
 
             // 识别并解析 AI 的 JSON 指令源码
             if (textContent.trim().startsWith('{')) {

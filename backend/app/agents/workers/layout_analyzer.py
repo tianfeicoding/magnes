@@ -88,7 +88,7 @@ async def refiner_node(state: MagnesState):
         "style_learning": style_description,
         "style_prompt": style_prompt, # 精准提取的风格描述
         "current_step": "refiner_completed",
-        "intent": state.get("intent")  # [FIX] 保留 intent，确保后续节点能获取原图 URL
+        "intent": state.get("intent")  # 保留 intent，确保后续节点能获取原图 URL
     }
 
 

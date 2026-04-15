@@ -98,5 +98,5 @@ async def style_analyzer_node(state: MagnesState):
         "macro_type": macro_type,
         "style_evolution": initial_evolution,  # 初始版本历史（包含 bilingual 结构）
         "current_step": "style_analyzer_completed",
-        "intent": state.get("intent")  # [FIX] 保留 intent，确保后续节点能获取原图 URL
+        "intent": state.get("intent")  # 保留 intent，确保后续节点能获取原图 URL
     }

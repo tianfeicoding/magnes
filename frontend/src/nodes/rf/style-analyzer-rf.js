@@ -90,7 +90,7 @@
         }, [id, nodesMap, studioConnections, rfNodes, rfEdges]);
 
         // V1.0: 监听验证结果，自动创建验证节点
-        // [FIX] 使用节点数据中的长度记录，防止组件重新创建时 ref 重置
+        // 使用节点数据中的长度记录，防止组件重新创建时 ref 重置
         useEffect(() => {
             if (validationMode && generatedImage && data.create_validator_node) {
                 const currentNode = getNode(id);
@@ -103,10 +103,10 @@
                 );
 
                 if (existingValidator) {
-                    // [FIX] 比较节点中记录的长度和当前长度，防止无限循环
+                    // 比较节点中记录的长度和当前长度，防止无限循环
                     const lastSyncedLength = existingValidator.data?._lastEvolutionLength || 0;
                     const validatorEvolutionLength = existingValidator.data?.style_evolution?.length || 0;
-                    // [FIX] 比较实际数据，而不仅仅是长度
+                    // 比较实际数据，而不仅仅是长度
                     const currentVersions = styleEvolution.map(e => e.version).join(',');
                     const validatorVersions = (existingValidator.data?.style_evolution || []).map(e => e.version).join(',');
                     const needsUpdate = styleEvolution.length > lastSyncedLength
@@ -137,7 +137,7 @@
                                 data: {
                                     ...n.data,
                                     style_evolution: styleEvolution,
-                                    critic_report: criticReport,  // [FIX] 同时传递评分报告
+                                    critic_report: criticReport,  // 同时传递评分报告
                                     _lastEvolutionLength: styleEvolution.length  // 记录已同步的长度
                                 }
                             };
@@ -200,18 +200,18 @@
                     // 直接使用事件中的 currentPrompt，不依赖 bgPrompt
                     setTimeout(() => {
                         if (!isProcessing) {
-                            // [FIX] 使用事件中传递的 styleEvolution，如果没有则使用本地的
+                            // 使用事件中传递的 styleEvolution，如果没有则使用本地的
                             const evolutionToPass = incomingStyleEvolution && incomingStyleEvolution.length > 0
                                 ? incomingStyleEvolution
                                 : styleEvolution;
-                            // [FIX] 使用事件中传递的 sourceImage（原图），如果没有则使用自己的 sourceImageUrl
+                            // 使用事件中传递的 sourceImage（原图），如果没有则使用自己的 sourceImageUrl
                             const imageToUse = sourceImage || sourceImageUrl;
                             console.log('[StyleAnalyzer] Passing style_evolution:', evolutionToPass?.length || 0, 'entries');
                             console.log('[StyleAnalyzer] Using source image:', imageToUse);
                             startGeneration({
                                 type: 'style_evolve',
                                 nodeId: id,
-                                sourceImages: imageToUse ? [imageToUse] : [],  // [FIX] 必须传递 sourceImages，后端需要它来获取原图 URL
+                                sourceImages: imageToUse ? [imageToUse] : [],  // 必须传递 sourceImages，后端需要它来获取原图 URL
                                 options: {
                                     run_style_evolve: true,
                                     evolution_strategy: strategy,
@@ -219,7 +219,7 @@
                                     enable_validation: true,  // 再优化默认开启验证
                                     evaluation_mode: evaluationMode,
                                     source_image: imageToUse,
-                                    style_evolution: evolutionToPass  // [FIX] 使用验证节点传递的版本历史
+                                    style_evolution: evolutionToPass  // 使用验证节点传递的版本历史
                                 },
                                 apiConfigs
                             });
@@ -275,7 +275,7 @@
 
         const handleCopyPrompt = (e) => {
             e.stopPropagation();
-            // [FIX] 复制选中版本的提示词，或当前提示词
+            // 复制选中版本的提示词，或当前提示词
             const promptToCopy = selectedVersion?.prompt || bgPrompt;
             if (!promptToCopy) return;
             navigator.clipboard.writeText(promptToCopy);
@@ -569,7 +569,7 @@
                             ),
                             React.createElement('div', { className: "flex flex-col gap-1" },
                                 (() => {
-                                    // [FIX] 统一版本显示逻辑：与风格验证节点一致
+                                    // 统一版本显示逻辑：与风格验证节点一致
                                     // V0: extract 版本（原图/原始提取）
                                     // V1, V2, V3...: 优化版本
                                     const versions = [];

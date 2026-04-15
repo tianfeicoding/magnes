@@ -22,7 +22,7 @@ async def get_llm_config(db: Optional[AsyncSession] = None, is_layering=False):
     user_url = None
     user_key = None
 
-    # [FIX] 如果没有传入 db，尝试自己创建一个会话
+    # 如果没有传入 db，尝试自己创建一个会话
     db_session = db
     should_close_db = False
     if db_session is None:

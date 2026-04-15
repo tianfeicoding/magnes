@@ -73,5 +73,5 @@ async def composer_node(state: MagnesState):
     return {
         "layout_schema": layout_schema,
         "current_step": "composing_completed",
-        "style_evolution": state.get("style_evolution", [])  # [FIX] 保留 style_evolution
+        "style_evolution": state.get("style_evolution", [])  # 保留 style_evolution
     }
