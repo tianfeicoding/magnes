@@ -300,10 +300,11 @@
                         {/* 三按钮组 (由检索来源/总结触发) */}
                         {!isUser && !apiEndpoint.includes('rag') && !msg.isGenerating &&
                             !displayContent.includes('正在为您搜索') && msg.action !== 'run_xhs_search' &&
-                            (msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.action === 'create_rednote_node' || msg.sourceIds?.length > 0 || Object.keys(messageSourceMap || {}).length > 0) && (
+                            msg.action !== 'create_rednote_node' &&
+                            (msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.sourceIds?.length > 0 || Object.keys(messageSourceMap || {}).length > 0) && (
                                 <div className="flex gap-2 mt-2">
-                                    {/* [FIX] summary_draft / analyze_inspiration 不再强制要求 results 字段，fast path 也能显示按钮 */}
-                                    {((msg.final_decision?.results?.length > 0) || (msg.sourceIds?.length > 0) || msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.action === 'create_rednote_node') && (
+                                    {/* summary_draft / analyze_inspiration 不再强制要求 results 字段，fast path 也能显示按钮 */}
+                                    {((msg.final_decision?.results?.length > 0) || (msg.sourceIds?.length > 0) || msg.action === 'summary_draft' || msg.action === 'analyze_inspiration') && (
                                         <>
                                             {!apiEndpoint.includes('rag') && (
                                                 <button
@@ -401,7 +402,7 @@
                                         onClick={() => {
                                             const emojiHint = msg.useEmoji ? ' (优先使用 Emoji 代替时间地点等标题)' : '';
                                             const command = `[技能指令] 确认选择模版: ${tpl.name} (ID: ${tpl.id})${emojiHint}`;
-                                            // [NEW] 立即更新当前消息的 templateId 状态
+                                            // 立即更新当前消息的 templateId 状态
                                             if (setMessages) {
                                                 setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, templateId: tpl.id } : m));
                                             }
@@ -506,7 +507,7 @@
             messagesRef.current = messages;
         }, [messages]);
 
-        const [pendingFileUpload, setPendingFileUpload] = useState(null); // [NEW] 记录待分类上传的文件: { file, categoryPromptId }
+        const [pendingFileUpload, setPendingFileUpload] = useState(null); // 记录待分类上传的文件: { file, categoryPromptId }
         const [sessions, setSessions] = useState([]);
         const [sessionListOpen, setSessionListOpen] = useState(false);
         const messagesEndRef = useRef(null);
@@ -709,7 +710,7 @@
                         });
                     }
 
-                    // [FIX] 克隆 DOM 并将图片内联为 base64，避免 CORS/缓存问题影响原始页面
+                    // 克隆 DOM 并将图片内联为 base64，避免 CORS/缓存问题影响原始页面
                     const clone = canvasEl.cloneNode(true);
                     clone.style.position = 'fixed';
                     clone.style.left = '-9999px';
@@ -768,10 +769,28 @@
             }
 
 
-            // [FIX] create_rednote_node 不再自动创建节点，改为让用户手动点击草稿箱按钮
+            // [专属处理] create_rednote_node：走标准的全局生成事件流，支持切换 Tab 和加载模版
             if (event.action === 'create_rednote_node') {
-                console.log('[ConversationPanel] 🏗️ create_rednote_node received, deferring to manual draft button');
-                return;
+                const activityContent = event.parameters?.content || '';
+                const templateId = event.parameters?.templateId || '';
+
+                // 从当前 AI 消息中提取 useEmoji 标志（如果有）
+                const targetId = msgId;
+                const currentMsg = messagesRef.current.find(m => m.id === targetId);
+                const useEmoji = event.parameters?.useEmoji !== undefined ? event.parameters.useEmoji : (currentMsg?.useEmoji || false);
+
+                console.log('[ConversationPanel] 🏗️ create_rednote_node, 委托给 onTriggerGeneration', { templateId, useEmoji });
+
+                if (onTriggerGeneration) {
+                    onTriggerGeneration(event.action, {
+                        ...event.parameters,
+                        prompt: activityContent,
+                        initialContent: activityContent,
+                        useEmoji: useEmoji,
+                        conversationId
+                    });
+                }
+                return; // create_rednote_node 已处理完毕
             }
 
             if (onTriggerGeneration && ['run_painter', 'show_painter_result', 'run_refiner', 'adjust_style', 'create_content_node', 'run_xhs_search', 'run_xhs_publish'].includes(event.action)) {
@@ -975,7 +994,7 @@
                 readerRef.current = reader;
                 const decoder = new TextDecoder();
                 let buffer = '';
-                let currentAiMsgId = aiMsgId; // [NEW] 支持动态切换目标气泡
+                let currentAiMsgId = aiMsgId; // 支持动态切换目标气泡
 
                 // 定义内部解析辅助函数，确保循环内外逻辑一致
                 const processBuffer = (targetBuffer) => {

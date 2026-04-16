@@ -95,7 +95,7 @@
 
                     if (context) {
                         setSidebarContext(context);
-                        // [FIX] 直接更新 ref，确保后续能立即使用
+                        // 直接更新 ref，确保后续能立即使用
                         sidebarContextRef.current = context;
                         console.log('[Magnes] ✅ Context set:', context);
                     }
@@ -152,7 +152,7 @@
                     // 假设目标是 FineTuneNode
                     const layerId = ctx.targetLayerId;
                     const nextData = { ...node.data, isDirty: true };
-                    // [FIX] 兼容 content 为空但图层在 layoutData 或 computedLayers 中的情况
+                    // 兼容 content 为空但图层在 layoutData 或 computedLayers 中的情况
                     const baseContent = node.data.content || node.data.layoutData || {};
                     const currentLayers = baseContent.layers || node.data.computedLayers || [];
 
@@ -202,9 +202,8 @@
         const [draftModalOpen, setDraftModalOpen] = useState(false);
         const [isDraftReadOnly, setIsDraftReadOnly] = useState(false);
         const [draftContent, setDraftContent] = useState('');
-        const [draftInitialMsg, setDraftInitialMsg] = useState(null); // [NEW] 恢复草稿箱的 useEmoji 状态
-        const [draftTemplateId, setDraftTemplateId] = useState(null); // [NEW] 灵感助手选中的模版 ID
-        const [currentDraftMsgId, setCurrentDraftMsgId] = useState(null); // [NEW] 当前正在草稿箱编辑的消息 ID
+        const [draftTemplateId, setDraftTemplateId] = useState(null); // 灵感助手选中的模版 ID
+        const [currentDraftMsgId, setCurrentDraftMsgId] = useState(null); // 当前正在草稿箱编辑的消息 ID
         const [publishModalOpen, setPublishModalOpen] = useState(false);
         const [publishData, setPublishData] = useState(null);
         const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -310,7 +309,6 @@
         useWindowEvents({
             setMessages, setPublishData, setPublishModalOpen,
             setDraftContent, setIsDraftReadOnly, setDraftModalOpen, setDraftTemplateId, setCurrentDraftMsgId,
-            setDraftInitialMsg, // [NEW]
             currentDraftMsgId,
             setNodes, setEdges, setActiveTab,
             handleCreateNodeRequest,
@@ -445,7 +443,6 @@
                     setDraftModalOpen={setDraftModalOpen}
                     draftContent={draftContent}
                     setDraftContent={setDraftContent}
-                    draftInitialMsg={draftInitialMsg}
                     isDraftReadOnly={isDraftReadOnly}
                     draftTemplateId={draftTemplateId}
                     setDraftTemplateId={setDraftTemplateId}

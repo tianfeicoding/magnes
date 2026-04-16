@@ -29,6 +29,7 @@
     const AddIcon = Plus || Copy;
 
     const API_BASE = window.MAGNES_API_BASE || 'http://localhost:8088/api/v1';
+    const ParseHelpers = window.MagnesComponents?.Utils?.ParseHelpers;
 
     // 辅助函数: 归一化活动项的键名
     const normalizeItem = (item) => {

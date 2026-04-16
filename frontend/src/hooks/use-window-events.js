@@ -20,7 +20,6 @@
         setDraftModalOpen,
         setDraftTemplateId,
         setCurrentDraftMsgId,
-        setDraftInitialMsg,
         currentDraftMsgId,
         setNodes,
         setEdges,
@@ -68,8 +67,6 @@
                 if (setDraftTemplateId) setDraftTemplateId(e.detail.templateId || null);
                 // 锁定当前编辑的消息 ID
                 if (setCurrentDraftMsgId) setCurrentDraftMsgId(e.detail.msgId || null);
-                // [NEW] 保留完整 msg，用于恢复 useEmoji 等状态
-                if (setDraftInitialMsg) setDraftInitialMsg(msg || null);
                 setDraftModalOpen(true);
             };
             window.addEventListener('magnes:open_draft_modal', handleDraftEvent);
@@ -202,7 +199,7 @@
                         autoImport: true,
                         useEmoji: useEmoji,
                         label: '灵感同步',
-                        conversationId: conversationId // [NEW] 标记会话 ID
+                        conversationId: conversationId // 标记会话 ID
                     }
                 };
 
@@ -222,7 +219,7 @@
                         data: {
                             selectedStyleId: templateId,
                             label: '模版选择',
-                            conversationId: conversationId // [NEW]
+                            conversationId: conversationId // 
                         }
                     });
 
@@ -234,7 +231,7 @@
                         data: {
                             label: '精细编辑',
                             templateId: templateId,
-                            conversationId: conversationId // [NEW]
+                            conversationId: conversationId // 
                         }
                     });
 
@@ -351,7 +348,7 @@
                 try {
                     toast?.('正在收藏图片...', 'info');
 
-                    // [FIX] 验证节点图片需要先入库到 Gallery，获取 doc_id 后才能收藏
+                    // 验证节点图片需要先入库到 Gallery，获取 doc_id 后才能收藏
                     // 步骤 1: 先入库到 Gallery
                     console.log('[useWindowEvents] 📤 先入库到 Gallery...');
                     const ingestResult = await api.post('/rag/ingest/gallery', {
