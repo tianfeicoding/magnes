@@ -69,18 +69,25 @@
 
                     // [FIX] 移除 '活动' 关键词，避免 '活动时间'/'活动地点' 等被错误匹配为 title
                     if (!normalized.title) normalized.title = stripLeadingEmoji(findInAllKeys(['标题', '主题', '名称', 'title', 'header']));
-                    if (!normalized.venue) normalized.venue = findInAllKeys(['地点', '场所', '场地', '地址', 'location', 'venue', 'address', 'subtitle']);
+                    // [FIX] 地点不再从 subtitle 提取，因为 subtitle (副标题) 往往就是活动名称本身
+                    if (!normalized.venue) normalized.venue = findInAllKeys(['地点', '场所', '场地', '地址', 'location', 'venue', 'address']);
                     if (!normalized.date) normalized.date = findInAllKeys(['日期', '时间', '月份', 'date', 'time', 'calendar']);
                     if (!normalized.price) normalized.price = findInAllKeys(['门票', '价格', '票价', '费用', 'price', 'ticket', 'fee']);
 
                     // [FIX] 无论 title 来自何处，统一剥除行首 emoji，保证内容节点与画布一致
                     if (normalized.title) normalized.title = stripLeadingEmoji(normalized.title);
 
+                    // [FIX] 防御性逻辑：如果解析出的地点和标题一模一样，说明是误提取，清理掉
+                    let finalVenue = normalized.venue || item.venue || '';
+                    if (finalVenue && normalized.title && stripLeadingEmoji(finalVenue) === normalized.title) {
+                        finalVenue = '';
+                    }
+
                     return {
                         ...item, // 先解开原始数据，保留所有原始 Key (如 "地点：")
                         id: item.id || Date.now() + Math.random(),
                         title: normalized.title || stripLeadingEmoji(item.title || ''),
-                        venue: normalized.venue || item.venue || '', // 归一化值作为最高优先级覆盖同名 Key
+                        venue: finalVenue, // 归一化值作为最高优先级覆盖同名 Key
                         date: normalized.date || item.date || '',
                         year: normalized.year || item.year || '2026',
                         price: normalized.price || item.price || '',
@@ -94,13 +101,17 @@
             const applyEmojiToItems = (items) => {
                 const iconMap = {
                     date: '⏰', time: '⏰', 时间: '⏰', 日期: '⏰', Date: '⏰', Time: '⏰',
-                    subtitle: '📍', venue: '📍', location: '📍', 地点: '📍', 场所: '📍', 场地: '📍', 地址: '📍', Location: '📍', Address: '📍', address: '📍', Venue: '📍',
+                    // [FIX] 移除 subtitle, 它是用于标题/副标题的，不应带 Emoji
+                    venue: '📍', location: '📍', 地点: '📍', 场所: '📍', 场地: '📍', 地址: '📍', Location: '📍', Address: '📍', address: '📍', Venue: '📍',
                     price: '🎫', 门票: '🎫', 价格: '🎫', 费用: '🎫', Price: '🎫', Fee: '🎫',
                     description: '✨', highlights: '✨', 亮点: '✨', 特色: '✨', 简介: '✨', 内容: '✨', Description: '✨', Highlights: '✨', Content: '✨'
                 };
                 return items.map(item => {
                     const newItem = { ...item };
                     for (const [key, icon] of Object.entries(iconMap)) {
+                        // [FIX] 确认不仅是名为 title 的 key，而是所有带有标题属性或 ID 的 key 都不打 Emoji
+                        if (key.toLowerCase().includes('title') || key === 'id' || key === 'year') continue;
+
                         if (newItem[key] && typeof newItem[key] === 'string') {
                             let val = newItem[key].trim();
                             // 移除所有可能的中文标题和符号前缀
@@ -143,18 +154,23 @@
             const rawTextContent = textContent;
 
             // 仅在显示层面（如果需要）对 textContent 进行 Emoji 增强
-            // 注意：不要修改 rawTextContent，它是交给 AI 解析的原始素材
-            // [FIX] 只给含冒号的行加 emoji，避免标题行被污染
-            if (useEmoji && textContent && !textContent.includes('⏰')) {
+            // [FIX] 严格识别关键词，不含关键词的行（标题）绝不加 Emoji
+            if (useEmoji && textContent) {
                 const lines = textContent.split('\n');
                 const emojiLines = lines.map(line => {
                     const l = line.trim();
+                    if (!l) return line;
+                    // 如果已经有 Emoji，不再处理
+                    if (l.match(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2300}-\u{23FF}\u{2700}-\u{27BF}]/u)) return line;
+
                     const hasColon = l.includes(':') || l.includes('：');
+                    // 没有冒号的行大概率是标题或纯信息，不加 Emoji
                     if (!hasColon) return line;
-                    if (l.includes('时间') || l.includes('日期')) return l.startsWith('⏰') ? line : '⏰ ' + line;
-                    if (l.includes('地点') || l.includes('场地')) return l.startsWith('📍') ? line : '📍 ' + line;
-                    if (l.includes('门票') || l.includes('价格')) return l.startsWith('🎫') ? line : '🎫 ' + line;
-                    if (l.includes('亮点') || l.includes('特色')) return l.startsWith('✨') ? line : '✨ ' + line;
+
+                    if (l.includes('时间') || l.includes('日期')) return '⏰ ' + l;
+                    if (l.includes('地点') || l.includes('场地')) return '📍 ' + l;
+                    if (l.includes('门票') || l.includes('价格')) return '🎫 ' + l;
+                    if (l.includes('亮点') || l.includes('特色')) return '✨ ' + l;
                     return line;
                 });
                 textContent = emojiLines.join('\n');

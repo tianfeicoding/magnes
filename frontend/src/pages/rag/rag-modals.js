@@ -111,46 +111,92 @@
         };
         const EMOJI_SET = Array.from(new Set(Object.values(EMOJI_MAP)));
 
-        // 工具函数：对文本进行 Emoji 增强（支持冒号行与空格分隔行）
+        // 工具函数：语义化 Emoji 增强（支持前缀替换 + 模式探齐）
         const applyEmojiToText = (text, checked) => {
             if (!text) return text;
+
+            const ROLE_MAP = {
+                date: { emoji: '⏰', keywords: ['时间', '日期', '月份', 'date', 'time'] },
+                venue: { emoji: '📍', keywords: ['地点', '场所', '场地', '地址', 'location', 'venue', 'address'] },
+                price: { emoji: '🎫', keywords: ['门票', '价格', '票价', '费用', 'price', 'ticket', 'fee'] },
+                desc: { emoji: '✨', keywords: ['亮点', '特色', '介绍', '简介', '内容', 'highlights', 'description'] }
+            };
+
+            const allKeywords = Object.values(ROLE_MAP).flatMap(r => r.keywords);
+            const prefixRegex = new RegExp(`^(${allKeywords.join('|')})[:：\\s]*`, 'i');
+
             const lines = text.split('\n');
-            const updatedLines = lines.map(line => {
+            let isFirstLineOfBlock = true;
+
+            const updatedLines = lines.map((line, idx) => {
                 const trimmed = line.trim();
-                if (!trimmed) return line;
-                const hasColon = trimmed.includes(':') || trimmed.includes('：');
-                const startsWithEmoji = EMOJI_SET.some(em => trimmed.startsWith(em));
-                if (checked) {
-                    if (startsWithEmoji) return line;
-                    // 1) 优先处理带冒号的行
-                    if (hasColon) {
-                        const parts = trimmed.split(/[:：]/);
-                        if (parts.length > 1) {
-                            for (const [key, emoji] of Object.entries(EMOJI_MAP)) {
-                                if (parts[0].toLowerCase().includes(key.toLowerCase())) {
-                                    return `${emoji} ${trimmed}`;
-                                }
-                            }
-                        }
-                    }
-                    // 2) 再尝试空格分隔的 keyword value 格式（如 "时间 2026.04.16"）
-                    const firstWord = trimmed.split(/\s+/)[0];
-                    for (const [key, emoji] of Object.entries(EMOJI_MAP)) {
-                        if (firstWord.toLowerCase().includes(key.toLowerCase())) {
-                            return `${emoji} ${trimmed}`;
-                        }
-                    }
-                    return line;
-                } else {
-                    if (!startsWithEmoji) return line;
-                    for (const emoji of EMOJI_SET) {
-                        if (trimmed.startsWith(emoji)) {
-                            return trimmed.replace(new RegExp(`^${emoji}\\s*`), '');
-                        }
-                    }
+                // 空行重置“首行”逻辑，用于多块内容的判断
+                if (!trimmed) {
+                    isFirstLineOfBlock = true;
                     return line;
                 }
+
+                const startsWithEmoji = EMOJI_SET.some(em => trimmed.startsWith(em));
+
+                if (checked) {
+                    // 1. 标题保护：如果是块的首行，且看起来像标题（不含明显的结构前缀），则不加 emoji
+                    if (isFirstLineOfBlock) {
+                        isFirstLineOfBlock = false;
+                        // 如果首行就带了“时间：”之类的前缀，说明不是标题，继续往下走识别逻辑
+                        if (!prefixRegex.test(trimmed)) return line;
+                    }
+
+                    if (startsWithEmoji) return line;
+
+                    // 2. 精准前缀替换逻辑
+                    for (const [role, config] of Object.entries(ROLE_MAP)) {
+                        const specificPrefix = new RegExp(`^(${config.keywords.join('|')})[:：\\s]+`, 'i');
+                        if (specificPrefix.test(trimmed)) {
+                            return trimmed.replace(specificPrefix, `${config.emoji} `);
+                        }
+                    }
+
+                    // 3. 语义模式探明（针对不带前缀的纯数据）
+
+                    // 标题核心词屏蔽：如果这行看起来像活动主题，绝不处理
+                    if (/(?:艺术节|展|季|集|大会|周年|博览会|嘉年华|Festival|Season|Expo)/i.test(trimmed)) return line;
+
+                    // 价格/单位（优先级高）：包含数字且含价格相关单位/词汇
+                    if (/(?:早鸟|现场|门票|票|元|单日|双日|套票|RMB|CNY|free|免费)/i.test(trimmed)) {
+                        return `🎫 ${trimmed}`;
+                    }
+
+                    // 日期/时间：包含日期连接符，且不是纯价格
+                    if (/\d{1,2}[.\-\/~～]\d{1,2}/.test(trimmed) || /\d+:\d{2}/.test(trimmed) || /[月日]/.test(trimmed)) {
+                        if (!/[路号馆场公园中心广场]/.test(trimmed) && !/元/.test(trimmed)) return `⏰ ${trimmed}`;
+                    }
+
+                    // 地址
+                    if (/[路街道号馆厅场苑园区中心广场博物馆展览]/.test(trimmed) || /[省市区县镇]/.test(trimmed)) {
+                        // 排除超长描述（可能有地址词但本质是描述）
+                        if (trimmed.length < 40) return `📍 ${trimmed}`;
+                    }
+
+                    // 亮点（收紧）：仅对带明确列表符号的行生效
+                    if (trimmed.startsWith('+') || trimmed.startsWith('•') || trimmed.startsWith('-')) {
+                        return `✨ ${trimmed}`;
+                    }
+
+                    return line;
+                } else {
+                    // 反向剥除：移除行首的 Emoji
+                    if (!startsWithEmoji) return line;
+                    let result = trimmed;
+                    for (const emoji of EMOJI_SET) {
+                        if (result.startsWith(emoji)) {
+                            result = result.replace(new RegExp(`^${emoji}\\s*`), '');
+                            break;
+                        }
+                    }
+                    return result;
+                }
             });
+
             return updatedLines.join('\n');
         };
 
@@ -160,7 +206,7 @@
             const rawContent = initialMsg?.parameters?.raw_draft_content || initialContent;
             const baseContent = cleanContent(rawContent);
             const shouldUseEmoji = !!initialMsg?.useEmoji;
-            // [FIX] 若上次已开启 Emoji，重新打开时立刻应用到预览内容
+            // 若上次已开启 Emoji，重新打开时立刻应用到预览内容
             setContent(shouldUseEmoji ? applyEmojiToText(baseContent, true) : baseContent);
             setSelectedText('');
             setSelectionRange({ start: 0, end: 0 });
@@ -267,7 +313,13 @@
                         className: 'px-10 py-2 bg-black text-white text-[12px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all',
                         onClick: () => {
                             const finalContent = useEmoji ? applyEmojiToText(content, true) : content;
-                            isEditMode ? onConfirm(finalContent, { useEmoji }) : onSyncToCanvas(finalContent, { useEmoji });
+                            // 确保同步到画布的内容中，第一行（标题）绝不带 Emoji，保持与精细编排一致
+                            const cleanLines = finalContent.split('\n');
+                            if (cleanLines.length > 0 && /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2300}-\u{23FF}\u{2700}-\u{27BF}]/u.test(cleanLines[0])) {
+                                cleanLines[0] = cleanLines[0].replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2300}-\u{23FF}\u{2700}-\u{27BF}]\s*/u, '');
+                            }
+                            const safeContent = cleanLines.join('\n');
+                            isEditMode ? onConfirm(safeContent, { useEmoji }) : onSyncToCanvas(safeContent, { useEmoji });
                         }
                     }, isEditMode ? '确认修改' : '同步画布')
                 )

@@ -89,7 +89,7 @@
     const applyEmojiToItems = (items) => {
         const iconMap = {
             date: '⏰', time: '⏰', 时间: '⏰', 日期: '⏰', Date: '⏰', Time: '⏰',
-            subtitle: '📍', venue: '📍', location: '📍', 地点: '📍', 场所: '📍', 场地: '📍', 地址: '📍', Location: '📍', Address: '📍', address: '📍', Venue: '📍',
+            venue: '📍', location: '📍', 地点: '📍', 场所: '📍', 场地: '📍', 地址: '📍', Location: '📍', Address: '📍', address: '📍', Venue: '📍',
             price: '🎫', 门票: '🎫', 价格: '🎫', 费用: '🎫', Price: '🎫', Fee: '🎫',
             description: '✨', highlights: '✨', 亮点: '✨', 特色: '✨', 简介: '✨', 内容: '✨', Description: '✨', Highlights: '✨', Content: '✨'
         };
