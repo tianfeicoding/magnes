@@ -77,7 +77,7 @@
         const X = Icons.X;
         const Trash2 = Icons.Trash2;
 
-        // [FIX] 动态获取 AssetPicker，确保在组件渲染时获取最新引用
+        // 动态获取 AssetPicker，确保在组件渲染时获取最新引用
         const getAssetPicker = () => window.MagnesComponents?.UI?.AssetPicker;
         const [assetPickerReady, setAssetPickerReady] = React.useState(false);
 

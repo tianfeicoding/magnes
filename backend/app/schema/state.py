@@ -43,7 +43,7 @@ def merge_style_evolution(existing: Optional[List[dict]], new_entries: Optional[
             print(f"[State Reducer] 检测到更新操作，替换现有版本列表")
             return new_entries  # 完整替换
 
-    # [FIX] 去重：避免重复添加相同 version 的条目
+    # 去重：避免重复添加相同 version 的条目
     filtered_new = [e for e in new_entries if e.get("version") not in existing_versions]
 
     if filtered_new:
@@ -81,7 +81,7 @@ class MagnesState(TypedDict):
     run_layout_analyzer: Optional[bool] # 是否运行布局分析
     run_style_analyzer: Optional[bool]  # 是否运行风格分析
     run_style_evolve: Optional[bool]    # 是否运行风格演化
-    run_style_critic: Optional[bool]    # [NEW] 是否运行风格验证评分
+    run_style_critic: Optional[bool]    # 是否运行风格验证评分
 
     style_learning: Annotated[Optional[str], reduce_last]  # 语义解析材料 (全文)
     style_prompt: Annotated[Optional[str], reduce_last]    # 精确生图 Prompt (兼容旧版)
@@ -89,12 +89,12 @@ class MagnesState(TypedDict):
     prompt_text_en: Annotated[Optional[str], reduce_last]  # 英文提示词 (给生图模型)
     style_genome: Annotated[Optional[dict], merge_dict]    # 结构化美学基因
     style_evolution: Annotated[List[dict], merge_style_evolution]   # 提示词演化历史（支持追加和更新）
-    critic_report: Annotated[Optional[dict], reduce_last] # [NEW] 视觉审计报告 (ReAct 观测项)
-    evolution_count: Annotated[int, operator.add]          # [NEW] 演化循环计数
+    critic_report: Annotated[Optional[dict], reduce_last] # 视觉审计报告 (ReAct 观测项)
+    evolution_count: Annotated[int, operator.add]          # 演化循环计数
     background_color: Optional[str]                        # 提取的背景色
-    evolved_version: Annotated[Optional[int], reduce_last] # [NEW] 当前演化版本号，用于关联生成的图片
-    style_evolution_update: Annotated[Optional[dict], reduce_last]  # [NEW] 用于更新 style_evolution 的标记
-    evaluation_mode: Annotated[Optional[str], reduce_last] # [NEW] 评分模式：clone（还原度）或 evolution（创作质量）
+    evolved_version: Annotated[Optional[int], reduce_last] # 当前演化版本号，用于关联生成的图片
+    style_evolution_update: Annotated[Optional[dict], reduce_last]  # 用于更新 style_evolution 的标记
+    evaluation_mode: Annotated[Optional[str], reduce_last] # 评分模式：clone（还原度）或 evolution（创作质量）
 
     active_skill: Optional[str]    #当前执行的业务技能 ID (如: rednote-cover-design)
     

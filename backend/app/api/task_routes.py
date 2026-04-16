@@ -250,11 +250,11 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
 
                 print(f"[Task Background] Validation mode: {enable_validation}, Evaluation mode: {evaluation_mode}")
 
-                # [FIX] 再优化时传递已有的版本历史
+                # 再优化时传递已有的版本历史
                 existing_evolution = options.get("style_evolution") or []
                 print(f"[Task Background] 接收到的版本历史: {len(existing_evolution)} 条")
 
-                # [NEW] 从历史版本中提取最新的 critic_report 用于反馈优化
+                # 从历史版本中提取最新的 critic_report 用于反馈优化
                 latest_critic_report = None
                 if existing_evolution:
                     # 查找最后一个有 critic_report 的版本
@@ -278,8 +278,8 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                     run_style_critic=enable_validation, # V1.0: 验证模式才评分
                     evaluation_mode=evaluation_mode,    # V1.0: 评分模式
                     evolution_count=0,
-                    style_evolution=existing_evolution,  # [FIX] 使用传入的版本历史
-                    critic_report=latest_critic_report,  # [NEW] 传递最新的评分报告用于反馈优化
+                    style_evolution=existing_evolution,  # 使用传入的版本历史
+                    critic_report=latest_critic_report,  # 传递最新的评分报告用于反馈优化
                     visual_assets=source_images or [],
                     current_step="init",
                     is_completed=False
@@ -298,7 +298,7 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                 # [DEBUG] 打印每个版本的简要信息
                 for idx, e in enumerate(final_evolution):
                     print(f"[Task Background] V{e.get('version')}: strategy={e.get('strategy')}, has_generated_image={bool(e.get('generated_image'))}, prompt_len={len(str(e.get('prompt', '')))}")
-                # [FIX] 只截断图片base64，保留其他所有内容
+                # 只截断图片base64，保留其他所有内容
                 evolution_log = []
                 for e in final_evolution:
                     entry = dict(e)
@@ -322,7 +322,7 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                         print(f"[Task Background] 最终 style_evolution 详细内容: {log_str}")
                 except Exception as e:
                     print(f"[Task Background] 最终 style_evolution 详细内容: [无法打印: {e}]")
-                # [FIX] 在返回前，确保 generated_image 和 critic_report 保存到 style_evolution
+                # 在返回前，确保 generated_image 和 critic_report 保存到 style_evolution
                 evolved_version = final_state.get("evolved_version")
                 generated_image_url = final_state.get("background_url")
                 critic_report_data = final_state.get("critic_report")
@@ -333,7 +333,7 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                             entry["generated_image"] = generated_image_url
                             if critic_report_data:
                                 entry["critic_report"] = critic_report_data
-                            print(f"[Task Background] [FIX] 已手动将 V{evolved_version} 的 generated_image 和 critic_report 关联到 style_evolution")
+                            print(f"[Task Background] 已手动将 V{evolved_version} 的 generated_image 和 critic_report 关联到 style_evolution")
                             break
                 else:
                     print(f"[Task Background] [DEBUG] 跳过修复: evolved_version={evolved_version}, generated_image_url={generated_image_url is not None}")
@@ -489,7 +489,7 @@ async def test_style_evolve():
 @router.post("/debug-echo")
 async def debug_echo(data: dict):
     """调试端点：回显接收到的数据"""
-    # [FIX] 截断打印，避免输出过长的base64图片
+    # 截断打印，避免输出过长的base64图片
     data_log = str(data)[:500] + "..." if data and len(str(data)) > 500 else data
     print(f"[DEBUG] 接收到的数据: {data_log}")
     return {

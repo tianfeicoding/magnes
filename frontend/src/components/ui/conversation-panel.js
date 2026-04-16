@@ -47,7 +47,7 @@
     };
 
     // ─── 单条气泡 ──────────────────────────────────────────────────────────────
-    const MessageBubble = ({ msg, apiEndpoint, onSendMessage, setMessages }) => {
+    const MessageBubble = ({ msg, apiEndpoint, onSendMessage, setMessages, messages, msgIndex }) => {
         const isUser = msg.role === 'user';
         const [thoughtOpen, setThoughtOpen] = useState(false);
         const [isExpanded, setIsExpanded] = useState(false);
@@ -300,21 +300,31 @@
                         {/* 三按钮组 (由检索来源/总结触发) */}
                         {!isUser && !apiEndpoint.includes('rag') && !msg.isGenerating &&
                             !displayContent.includes('正在为您搜索') && msg.action !== 'run_xhs_search' &&
-                            msg.action !== 'create_rednote_node' &&
-                            (msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.sourceIds?.length > 0 || Object.keys(messageSourceMap || {}).length > 0) && (
+                            (msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.action === 'create_rednote_node' || msg.sourceIds?.length > 0 || Object.keys(messageSourceMap || {}).length > 0) && (
                                 <div className="flex gap-2 mt-2">
-                                    {/* 仅当有真实检索结果(results)时才显示草稿箱和来源 [兼容新架构] */}
-                                    {((msg.final_decision?.results?.length > 0) || (msg.sourceIds?.length > 0)) && (
+                                    {/* [FIX] summary_draft / analyze_inspiration 不再强制要求 results 字段，fast path 也能显示按钮 */}
+                                    {((msg.final_decision?.results?.length > 0) || (msg.sourceIds?.length > 0) || msg.action === 'summary_draft' || msg.action === 'analyze_inspiration' || msg.action === 'create_rednote_node') && (
                                         <>
                                             {!apiEndpoint.includes('rag') && (
                                                 <button
                                                     onClick={() => {
-                                                        const draftContent = (msg.reply || msg.content || '').replace(/\\n/g, '\n');
+                                                        // [PATCH] 草稿箱里应放用户的原始输入，而不是AI回复
+                                                        let draftContent = '';
+                                                        if (messages && msgIndex != null) {
+                                                            // 向前查找最近一条用户消息
+                                                            const prevUserMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user');
+                                                            draftContent = prevUserMsg?.content || '';
+                                                        }
+                                                        if (!draftContent) {
+                                                            draftContent = msg.parameters?.raw_draft_content || msg.reply || msg.content || '';
+                                                        }
+                                                        draftContent = draftContent.replace(/\\n/g, '\n');
                                                         window.dispatchEvent(new CustomEvent('magnes:open_draft_modal', {
                                                             detail: {
                                                                 content: draftContent,
+                                                                msg: { ...msg, parameters: { ...(msg.parameters || {}), raw_draft_content: draftContent } },
                                                                 templateId: msg.templateId,
-                                                                msgId: msg.id // 记录发起草稿的消息 ID
+                                                                msgId: msg.id
                                                             }
                                                         }));
                                                     }}
@@ -699,11 +709,42 @@
                         });
                     }
 
-                    const canvas = await window.html2canvas(canvasEl, {
+                    // [FIX] 克隆 DOM 并将图片内联为 base64，避免 CORS/缓存问题影响原始页面
+                    const clone = canvasEl.cloneNode(true);
+                    clone.style.position = 'fixed';
+                    clone.style.left = '-9999px';
+                    clone.style.top = '-9999px';
+                    clone.style.width = canvasEl.offsetWidth + 'px';
+                    clone.style.height = canvasEl.offsetHeight + 'px';
+                    document.body.appendChild(clone);
+
+                    const originalImgs = Array.from(canvasEl.querySelectorAll('img'));
+                    const clonedImgs = Array.from(clone.querySelectorAll('img'));
+                    for (let i = 0; i < originalImgs.length && i < clonedImgs.length; i++) {
+                        const origImg = originalImgs[i];
+                        const clonedImg = clonedImgs[i];
+                        try {
+                            if (origImg.complete && origImg.naturalWidth > 0) {
+                                const c = document.createElement('canvas');
+                                c.width = origImg.naturalWidth;
+                                c.height = origImg.naturalHeight;
+                                c.getContext('2d').drawImage(origImg, 0, 0);
+                                clonedImg.src = c.toDataURL('image/png');
+                                clonedImg.crossOrigin = 'anonymous';
+                            }
+                        } catch (imgErr) {
+                            console.warn('[ConversationPanel] Could not inline image:', imgErr);
+                            clonedImg.crossOrigin = 'anonymous';
+                        }
+                    }
+
+                    const canvas = await window.html2canvas(clone, {
                         useCORS: true,
                         scale: 2,
                         backgroundColor: '#ffffff'
                     });
+                    if (clone.parentNode) clone.parentNode.removeChild(clone);
+
                     const dataUrl = canvas.toDataURL('image/png');
 
                     // 将截图以图片消息形式更新到对话框
@@ -727,28 +768,10 @@
             }
 
 
-            // [专属处理] create_rednote_node：走标准的全局生成事件流，支持切换 Tab 和加载模版
+            // [FIX] create_rednote_node 不再自动创建节点，改为让用户手动点击草稿箱按钮
             if (event.action === 'create_rednote_node') {
-                const activityContent = event.parameters?.content || '';
-                const templateId = event.parameters?.templateId || '';
-
-                // 从当前 AI 消息中提取 useEmoji 标志（如果有）
-                const targetId = msgId; 
-                const currentMsg = messagesRef.current.find(m => m.id === targetId);
-                const useEmoji = event.parameters?.useEmoji !== undefined ? event.parameters.useEmoji : (currentMsg?.useEmoji || false);
-
-                console.log('[ConversationPanel] 🏗️ create_rednote_node, 委托给 onTriggerGeneration', { templateId, useEmoji });
-
-                if (onTriggerGeneration) {
-                    onTriggerGeneration(event.action, {
-                        ...event.parameters,
-                        prompt: activityContent,
-                        initialContent: activityContent,
-                        useEmoji: useEmoji,
-                        conversationId
-                    });
-                }
-                return; // create_rednote_node 已处理完毕
+                console.log('[ConversationPanel] 🏗️ create_rednote_node received, deferring to manual draft button');
+                return;
             }
 
             if (onTriggerGeneration && ['run_painter', 'show_painter_result', 'run_refiner', 'adjust_style', 'create_content_node', 'run_xhs_search', 'run_xhs_publish'].includes(event.action)) {
@@ -995,7 +1018,7 @@
                                 ));
                             } else if (event.type === 'action') {
                                 setMessages(prev => prev.map(m =>
-                                    m.id === currentAiMsgId ? { ...m, action: event.action } : m
+                                    m.id === currentAiMsgId ? { ...m, action: event.action, parameters: event.parameters || m.parameters } : m
                                 ));
                                 handlePlannerAction(event, currentAiMsgId);
                             } else if (event.type === 'retrieval_results') {
@@ -1015,6 +1038,7 @@
                                         ...m,
                                         content: event.content !== undefined ? (m.content + event.content) : m.content,
                                         action: event.action || m.action,
+                                        parameters: event.parameters || m.parameters,
                                         templateId: event.templateId || event.parameters?.templateId || m.templateId,
                                         imageUrl: event.imageUrl || m.imageUrl,
                                         follow_up_reply: event.follow_up_reply || m.follow_up_reply,
@@ -1319,8 +1343,8 @@
                                     </div>
                                 )
                             )}
-                            {messages.map(msg => (
-                                <MessageBubble key={msg.id} msg={msg} apiEndpoint={apiEndpoint} onSendMessage={sendMessage} setMessages={setMessages} />
+                            {messages.map((msg, idx) => (
+                                <MessageBubble key={msg.id} msg={msg} apiEndpoint={apiEndpoint} onSendMessage={sendMessage} setMessages={setMessages} messages={messages} msgIndex={idx} />
                             ))}
                             <div ref={messagesEndRef} />
                         </div>

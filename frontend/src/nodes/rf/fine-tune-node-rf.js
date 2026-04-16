@@ -14,6 +14,52 @@
         const { MousePointer2, ExternalLink, Sliders, Trash2: Trash, Check, ChevronDown, Copy, Plus, Type, Image: ImageIcon } = Icons;
         const BaseNode = MAGNES.Nodes?.BaseNode;
 
+        // 统一解析图片 URL：相对路径补全为后端绝对路径
+        const resolveImageUrl = (url) => {
+            if (!url) return '';
+            if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
+            if (url.startsWith('/')) {
+                const apiBase = MAGNES.Utils?.Constants?.MAGNES_API_URL || '';
+                const host = apiBase ? apiBase.replace('/api/v1', '') : (window.location.protocol === 'file:' ? 'http://localhost:8088' : `http://${window.location.host}`);
+                return `${host}${url}`;
+            }
+            return url;
+        };
+
+        // 辅助函数：克隆画布并将图片内联为 base64，避免 html2canvas 的 CORS/缓存问题影响原始 DOM
+        const cloneCanvasForExport = (canvasElement) => {
+            const clone = canvasElement.cloneNode(true);
+            clone.style.position = 'fixed';
+            clone.style.left = '-9999px';
+            clone.style.top = '-9999px';
+            clone.style.width = canvasElement.offsetWidth + 'px';
+            clone.style.height = canvasElement.offsetHeight + 'px';
+            document.body.appendChild(clone);
+
+            const originalImgs = Array.from(canvasElement.querySelectorAll('img'));
+            const clonedImgs = Array.from(clone.querySelectorAll('img'));
+
+            for (let i = 0; i < originalImgs.length && i < clonedImgs.length; i++) {
+                const origImg = originalImgs[i];
+                const clonedImg = clonedImgs[i];
+                try {
+                    if (origImg.complete && origImg.naturalWidth > 0) {
+                        const c = document.createElement('canvas');
+                        c.width = origImg.naturalWidth;
+                        c.height = origImg.naturalHeight;
+                        c.getContext('2d').drawImage(origImg, 0, 0);
+                        clonedImg.src = c.toDataURL('image/png');
+                        clonedImg.crossOrigin = 'anonymous';
+                    }
+                } catch (err) {
+                    console.warn('[FineTune] Could not inline image for export:', err);
+                    // 回退：保持原始 resolved URL，让 html2canvas 自己尝试
+                    clonedImg.crossOrigin = 'anonymous';
+                }
+            }
+            return clone;
+        };
+
         if (!BaseNode) {
             console.warn(`[FineTuneNode] BaseNode not found during render of ${id}`);
             return null;
@@ -373,18 +419,23 @@
                     const canvasElement = document.querySelector(`.fine-tune-canvas-${id}`);
                     if (!canvasElement) continue;
 
-                    const canvas = await window.html2canvas(canvasElement, {
-                        useCORS: true,
-                        scale: 2,
-                        backgroundColor: '#ffffff'
-                    });
+                    const clone = cloneCanvasForExport(canvasElement);
+                    try {
+                        const canvas = await window.html2canvas(clone, {
+                            useCORS: true,
+                            scale: 2,
+                            backgroundColor: '#ffffff'
+                        });
 
-                    const link = document.createElement('a');
-                    link.download = `Magnes_Batch_P${i + 1}_${Date.now()}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
+                        const link = document.createElement('a');
+                        link.download = `Magnes_Batch_P${i + 1}_${Date.now()}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
 
-                    console.log(`[FineTune] Exported page ${i + 1}/${totalPages}`);
+                        console.log(`[FineTune] Exported page ${i + 1}/${totalPages}`);
+                    } finally {
+                        if (clone.parentNode) clone.parentNode.removeChild(clone);
+                    }
                 }
 
                 // 恢复原始页码
@@ -715,16 +766,21 @@
                     });
                 }
 
-                const canvas = await window.html2canvas(canvasElement, {
-                    useCORS: true,
-                    scale: 2, // 导出 2 倍图保证清晰度
-                    backgroundColor: '#ffffff'
-                });
+                const clone = cloneCanvasForExport(canvasElement);
+                try {
+                    const canvas = await window.html2canvas(clone, {
+                        useCORS: true,
+                        scale: 2, // 导出 2 倍图保证清晰度
+                        backgroundColor: '#ffffff'
+                    });
 
-                const link = document.createElement('a');
-                link.download = `Magnes_Page_${currentPage + 1}_${Date.now()}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
+                    const link = document.createElement('a');
+                    link.download = `Magnes_Page_${currentPage + 1}_${Date.now()}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                } finally {
+                    if (clone.parentNode) clone.parentNode.removeChild(clone);
+                }
             } catch (err) {
                 console.error('[FineEdit] Export failed:', err);
                 alert("导出失败：" + err.message);
@@ -1164,7 +1220,8 @@
                                             >
                                                 {layer.url ? (
                                                     <img
-                                                        src={layer.url.startsWith('/uploads') ? `http://localhost:8088${layer.url}` : layer.url}
+                                                        src={resolveImageUrl(layer.url)}
+                                                        crossOrigin="anonymous"
                                                         className={`w-full h-full pointer-events-none ${isBackground ? 'object-cover' : 'object-contain'}`}
                                                     />
                                                 ) : (
@@ -1307,7 +1364,7 @@
                                 onClick={() => fileInputRef.current?.click()}
                             >
                                 {currentBgUrl ? (
-                                    <img src={currentBgUrl} className="w-full h-full object-contain" />
+                                    <img src={resolveImageUrl(currentBgUrl)} crossOrigin="anonymous" className="w-full h-full object-contain" />
                                 ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center text-zinc-300 gap-1">
                                         <Icons.Upload size={24} strokeWidth={1} />

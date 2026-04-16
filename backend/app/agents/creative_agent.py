@@ -106,24 +106,68 @@ async def _execute_copy_writer_llm(state: PlannerState, decision: dict):
     else:
         content = decision.get("parameters", {}).get("content") or str(state.get("messages")[-1].content)
         
-    res = await generate_copy_writing(content, "")
+    if decision.get("action") == "summary_draft":
+        # 如果是总结草稿箱（通常来自直接输入），保留原样，不进行 AI 改写
+        # [CLEANUP] 防止上游节点（如 Planner）的引导语污染正文内容
+        res = content
+        if "✅" in res and ("提取" in res or "完成" in res):
+            # 尝试通过换行符拆分，取第一行尝试匹配引导语并剔除
+            lines = res.split('\n')
+            if len(lines) > 1 and "✅" in lines[0]:
+                res = "\n".join(lines[1:]).strip()
+    else:
+        # 其他情况（如搜索后生成文案），执行 AI 润色/改写
+        res = await generate_copy_writing(content, "")
+        
     is_safe, found_words = await check_sensitive_words(res)
     status_msg = "" if is_safe else f"\n\n⚠️ [检测到敏感词: {', '.join(found_words)}]"
-    final_reply = res + status_msg
+    templates = decision.get("templates")
+    follow_up_reply = decision.get("follow_up_reply")
+
+    if decision.get("action") == "summary_draft":
+        # 提取原始内容，优先从 parameters 中获取
+        raw_res = decision.get("parameters", {}).get("content") or content
+        res = raw_res
+        
+        # 强制设置唯一提示语，杜绝语言叠加
+        final_reply = "✅ 活动信息提取完成，已为您整理至草稿箱。"
+        follow_up_reply = "请从下方选择一个海报模版进行预览："
+        
+        if not templates:
+            from app.core.template_utils import get_available_templates_metadata
+            templates = await get_available_templates_metadata()
+    else:
+        # 其他动作（如搜索后生成），执行 AI 润色/改写
+        res = await generate_copy_writing(content, "")
+        final_reply = res + status_msg
+    
+    # 构造最终的消息 JSON
+    final_params = {
+        **decision.get("parameters", {}), 
+        "text_to_check": res,
+        "raw_draft_content": res 
+    }
     
     message_content = json.dumps({
         "thought": decision.get("thought", ""),
         "action": decision.get("action"),
         "reply": final_reply,
-        "follow_up_reply": decision.get("follow_up_reply"),
-        "templates": decision.get("templates"),
+        "follow_up_reply": follow_up_reply,
+        "templates": templates,
         "results": decision.get("results"),
-        "parameters": {**decision.get("parameters", {}), "text_to_check": res}
+        "parameters": final_params
     }, ensure_ascii=False)
     
     return {
-        "final_decision": {**decision, "reply": final_reply},
-        "messages": [AIMessage(content=message_content)]
+        "final_decision": {
+            **decision, 
+            "reply": final_reply, 
+            "follow_up_reply": follow_up_reply, 
+            "templates": templates,
+            "parameters": final_params
+        },
+        "messages": [AIMessage(content=message_content)],
+        "structured_content": {"items": [{"title": "提取内容", "description": res}]}
     }
 
 # ---------------- 中枢执行节点 ----------------

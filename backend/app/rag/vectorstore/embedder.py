@@ -205,7 +205,7 @@ async def embed_text(text: str) -> Optional[list[float]]:
     return None
 
 async def embed_text_batch(texts: List[str]) -> List[List[float]]:
-    """[NEW] 异步批量向量化：显著减少入库时的 HTTP 往返次数"""
+    """异步批量向量化：显著减少入库时的 HTTP 往返次数"""
     from app.core.llm_config import get_llm_config
     import asyncio
 

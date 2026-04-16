@@ -102,12 +102,71 @@
         const textAreaRef = useRef(null);
         const tooltipRef = useRef(null);
 
+        // Emoji 映射表提取为可复用常量（支持中英双语及多种同义词）
+        const EMOJI_MAP = {
+            '时间': '⏰', '日期': '⏰', 'time': '⏰', 'date': '⏰',
+            '地点': '📍', '场所': '📍', '场地': '📍', 'venue': '📍', 'location': '📍', 'address': '📍',
+            '门票': '🎫', '价格': '🎫', '票价': '🎫', 'price': '🎫', 'ticket': '🎫', 'fee': '🎫',
+            '亮点': '✨', '介绍': '✨', '卖点': '✨', 'highlights': '✨', 'description': '✨', 'content': '✨', 'intro': '✨'
+        };
+        const EMOJI_SET = Array.from(new Set(Object.values(EMOJI_MAP)));
+
+        // 工具函数：对文本进行 Emoji 增强（支持冒号行与空格分隔行）
+        const applyEmojiToText = (text, checked) => {
+            if (!text) return text;
+            const lines = text.split('\n');
+            const updatedLines = lines.map(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return line;
+                const hasColon = trimmed.includes(':') || trimmed.includes('：');
+                const startsWithEmoji = EMOJI_SET.some(em => trimmed.startsWith(em));
+                if (checked) {
+                    if (startsWithEmoji) return line;
+                    // 1) 优先处理带冒号的行
+                    if (hasColon) {
+                        const parts = trimmed.split(/[:：]/);
+                        if (parts.length > 1) {
+                            for (const [key, emoji] of Object.entries(EMOJI_MAP)) {
+                                if (parts[0].toLowerCase().includes(key.toLowerCase())) {
+                                    return `${emoji} ${trimmed}`;
+                                }
+                            }
+                        }
+                    }
+                    // 2) 再尝试空格分隔的 keyword value 格式（如 "时间 2026.04.16"）
+                    const firstWord = trimmed.split(/\s+/)[0];
+                    for (const [key, emoji] of Object.entries(EMOJI_MAP)) {
+                        if (firstWord.toLowerCase().includes(key.toLowerCase())) {
+                            return `${emoji} ${trimmed}`;
+                        }
+                    }
+                    return line;
+                } else {
+                    if (!startsWithEmoji) return line;
+                    for (const emoji of EMOJI_SET) {
+                        if (trimmed.startsWith(emoji)) {
+                            return trimmed.replace(new RegExp(`^${emoji}\\s*`), '');
+                        }
+                    }
+                    return line;
+                }
+            });
+            return updatedLines.join('\n');
+        };
+
         useEffect(() => {
-            setContent(cleanContent(initialContent));
+            // [PATCH] 优先从 parameters.raw_draft_content 加载原始全量内容
+            // 这样即便聊天泡泡里显示的是简洁的提示语，草稿箱里依然是完整的活动内容
+            const rawContent = initialMsg?.parameters?.raw_draft_content || initialContent;
+            const baseContent = cleanContent(rawContent);
+            const shouldUseEmoji = !!initialMsg?.useEmoji;
+            // [FIX] 若上次已开启 Emoji，重新打开时立刻应用到预览内容
+            setContent(shouldUseEmoji ? applyEmojiToText(baseContent, true) : baseContent);
             setSelectedText('');
             setSelectionRange({ start: 0, end: 0 });
             setAiInstructions('');
-        }, [initialContent, isOpen]);
+            setUseEmoji(shouldUseEmoji);
+        }, [initialContent, initialMsg, isOpen]);
 
         useEffect(() => {
             if (!selectedText) return;
@@ -160,7 +219,10 @@
                 }, '编辑草稿'),
                 h('button', {
                     className: 'px-10 py-2 bg-black text-white text-[12px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all',
-                    onClick: () => isEditMode ? onConfirm(content) : onSyncToCanvas(content, { useEmoji })
+                    onClick: () => {
+                        const finalContent = useEmoji ? applyEmojiToText(content, true) : content;
+                        isEditMode ? onConfirm(finalContent) : onSyncToCanvas(finalContent, { useEmoji });
+                    }
                 }, isEditMode ? '确认修改' : '发布至画布')
             )
         ) : (
@@ -178,63 +240,35 @@
                         onChange: e => {
                             const checked = e.target.checked;
                             setUseEmoji(checked);
-
-                            // [NEW] 实时转换文本中的 Emoji
-                            const emojiMap = {
-                                '时间': '⏰', '日期': '⏰', 'time': '⏰',
-                                '地点': '📍', '场所': '📍', '场地': '📍', 'location': '📍',
-                                '门票': '🎫', '价格': '🎫', '票价': '🎫',
-                                '亮点': '✨', '介绍': '✨', '卖点': '✨', 'highlights': '✨'
-                            };
-
-                            const lines = content.split('\n');
-                            const updatedLines = lines.map(line => {
-                                let newLine = line;
-                                if (checked) {
-                                    // 添加 Emoji: 找关键字，且行首还没 Emoji
-                                    for (const [key, emoji] of Object.entries(emojiMap)) {
-                                        if (line.includes(key) && !line.trim().startsWith(emoji)) {
-                                            const parts = line.split(/[:\uff1a]/);
-                                            if (parts.length > 1 && parts[0].includes(key)) {
-                                                newLine = `${emoji} ${line.trim()}`;
-                                            }
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    // 移除 Emoji: 找所有可能的 Emoji 并剥离
-                                    const emojis = Array.from(new Set(Object.values(emojiMap)));
-                                    for (const emoji of emojis) {
-                                        if (line.trim().startsWith(emoji)) {
-                                            newLine = line.trim().replace(new RegExp(`^${emoji}\\s*`), '');
-                                            break;
-                                        }
-                                    }
-                                }
-                                return newLine;
-                            });
-                            setContent(updatedLines.join('\n'));
+                            // [PATCH] 实时转换文本中的 Emoji
+                            const newContent = applyEmojiToText(content, checked);
+                            console.log('[DraftModal] Emoji toggle:', checked, 'old:', content.substring(0, 60), 'new:', newContent.substring(0, 60));
+                            setContent(newContent);
                         }
                     }),
                     h('label', {
                         htmlFor: 'use-emoji-toggle',
                         className: 'text-[12px] font-bold cursor-pointer select-none'
-                    }, '使用 Emoji 标题')
+                    }, 'Emoji 模式(实时预览)')
                 ),
                 h('div', { className: 'flex gap-4' },
                     h('button', {
                         className: 'px-6 py-2 border border-black text-[12px] font-bold uppercase hover:bg-zinc-100 transition-colors',
                         onClick: () => {
                             //  为草稿提供“确认保存到对话”的能力
+                            const finalContent = useEmoji ? applyEmojiToText(content, true) : content;
                             window.dispatchEvent(new CustomEvent('magnes:draft_modified', {
-                                detail: { content, useEmoji }
+                                detail: { content: finalContent, useEmoji }
                             }));
                             onClose();
                         }
                     }, '确认保存'),
                     h('button', {
                         className: 'px-10 py-2 bg-black text-white text-[12px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all',
-                        onClick: () => isEditMode ? onConfirm(content, { useEmoji }) : onSyncToCanvas(content, { useEmoji })
+                        onClick: () => {
+                            const finalContent = useEmoji ? applyEmojiToText(content, true) : content;
+                            isEditMode ? onConfirm(finalContent, { useEmoji }) : onSyncToCanvas(finalContent, { useEmoji });
+                        }
                     }, isEditMode ? '确认修改' : '同步画布')
                 )
             )
@@ -365,7 +399,7 @@
                 // 识别活动标题：不再排除数字 (解决 "搞事市集vol.7" 问题)
                 // 逻辑：首行、加粗或较短行，且不含冒号（冒号通常引导详情）
                 const isTitleCandidate = /^\s*(\*\*|#|•|-)?\s*.{2,30}?\s*(\*\*)?\s*$/.test(trimmed) &&
-                    !trimmed.includes(':') && !trimmed.includes('：') && 
+                    !trimmed.includes(':') && !trimmed.includes('：') &&
                     !trimmed.includes('[[') && !trimmed.includes('【');
 
                 if (isTitleCandidate) {
@@ -374,7 +408,7 @@
                         .replace(/\*\*/g, '')
                         .replace(/^\s*活动名称\s*/, '')
                         .trim();
-                    
+
                     // [Compensate] 预先创建 section 确保即便是没带标签的活动也能显示
                     if (!currentResults.find(r => r.section === currentActivity)) {
                         currentResults.push({ section: currentActivity, noteMap: {} });

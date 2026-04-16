@@ -157,6 +157,58 @@
         },
 
         /**
+         * 自动推断语义化文本层的 groupId（基于 Y 坐标聚类）
+         * 解决老模版缺少 groupId 导致多活动映射错位的问题
+         * @param {Array} layers 原始图层列表
+         * @returns {Array} 注入 groupId 后的图层列表
+         */
+        autoInjectGroupIds: (layers) => {
+            const semanticTexts = layers
+                .map((l, idx) => ({ ...l, _idx: idx }))
+                .filter(l => l.type === 'text' && l.semanticRole);
+
+            if (semanticTexts.length === 0) return layers;
+
+            // 如果已有任何语义层带有 groupId，说明模板已有分组设计，不再自动推断
+            const hasAnyGroupId = semanticTexts.some(l => l.groupId);
+            if (hasAnyGroupId) return layers;
+
+            // 按 Y 坐标排序
+            semanticTexts.sort((a, b) => (a.bbox?.[1] || 0) - (b.bbox?.[1] || 0));
+
+            const gaps = [];
+            for (let i = 1; i < semanticTexts.length; i++) {
+                gaps.push((semanticTexts[i].bbox?.[1] || 0) - (semanticTexts[i - 1].bbox?.[1] || 0));
+            }
+
+            const sortedGaps = [...gaps].sort((a, b) => a - b);
+            const median = sortedGaps[Math.floor(sortedGaps.length / 2)] || 0;
+            const threshold = Math.max(median * 2, 60); // 最小阈值 60，防止单字段模板被过度拆分
+
+            // 先聚类出逻辑分组
+            const groups = [];
+            let currentGroup = [semanticTexts[0]];
+            for (let i = 1; i < semanticTexts.length; i++) {
+                if (gaps[i - 1] > threshold) {
+                    groups.push(currentGroup);
+                    currentGroup = [];
+                }
+                currentGroup.push(semanticTexts[i]);
+            }
+            groups.push(currentGroup);
+
+            const result = [...layers];
+            groups.forEach((group, gi) => {
+                const groupId = `group_${gi + 1}`;
+                group.forEach(l => {
+                    result[l._idx] = { ...result[l._idx], groupId };
+                });
+            });
+
+            return result;
+        },
+
+        /**
          * 将输入内容映射到图层中（根据语义角色或默认顺序）
          * @param {Array} layers 图层列表
          * @param {Object} content 输入内容对象 { title, venue, date, ... }
@@ -166,6 +218,9 @@
         mapContentToLayers: (layers, content, options = {}) => {
             const { pageOffset = 0, itemsPerPage = 3, overrides = null } = options;
             if (!layers || !content) return layers;
+
+            // [Magnes Fix] 自动为缺少 groupId 的语义层注入分组，避免老模版多活动错位
+            const injectedLayers = LayoutUtils.autoInjectGroupIds(layers);
 
             // 自动解包：如果输入的是完整的 Node Data 且包含 content 或 extractedContent 容器
             let fieldMap = content;
@@ -229,8 +284,8 @@
             console.log('[LayoutUtils] RESOLVED images (Flattened):', images);
 
             // 自动补全机制：如果模版完全没定义图片层，但输入有图，则强制注入一个背景插槽
-            const hasAnyImageLayer = layers.some(l => l.type === 'image' || l.type === 'placeholder_image' || l.type === 'background');
-            let layersToProcess = [...layers];
+            const hasAnyImageLayer = injectedLayers.some(l => l.type === 'image' || l.type === 'placeholder_image' || l.type === 'background');
+            let layersToProcess = [...injectedLayers];
 
             if (!hasAnyImageLayer && images.length > 0) {
                 console.log('[LayoutUtils] No images defined in template. Injecting generic background placeholder as fallback.');
@@ -280,10 +335,20 @@
                         // B. 优先级 2: 全局字段路由 (No groupId)
                         // 仅当 AI 明确判定为 title (总标题) 且没有组 ID 时，才映射到 mainTitle
                         if (!valFound && !l.groupId) {
-                            if (role === 'title' && augmentedMap.main_title !== undefined) {
-                                finalVal = augmentedMap.main_title;
-                                valFound = true;
-                                console.log(`[LayoutUtils] Global MainTitle Match: role=${role} -> main_title`);
+                            if (role === 'title') {
+                                const mainTitle = augmentedMap.main_title;
+                                if (mainTitle && mainTitle.trim()) {
+                                    // 有全局总标题，直接使用
+                                    finalVal = mainTitle;
+                                    valFound = true;
+                                    console.log(`[LayoutUtils] Global MainTitle Match: role=${role} -> main_title`);
+                                } else if (items.length > 0 && items[0].title) {
+                                    // [PATCH] 全局总标题为空时，以第一个活动的标题兜底，
+                                    // 避免"无 groupId 的 title 层"在多活动场景下被错误隐藏
+                                    finalVal = items[0].title;
+                                    valFound = true;
+                                    console.log(`[LayoutUtils] Global Title Fallback to items[0].title: "${finalVal}"`);
+                                }
                             }
                             // 注意：非 title 角色的全局内容（如装饰文字）应保持原样，不参与自动填充
                         }
@@ -316,8 +381,18 @@
                             l.isHidden = true;
                             l.opacity = 0;
                         } else {
-                            l.text = finalVal;
-                            l.content = finalVal;
+                            // [PATCH] title 角色层：去除 finalVal 行首可能残留的 Emoji
+                            // 防止 applyEmojiToItems 或其他路径污染标题显示
+                            let displayVal = String(finalVal);
+                            if (role === 'title' || role === 'main') {
+                                let cleanVal = displayVal;
+                                while (/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u.test(cleanVal)) {
+                                    cleanVal = cleanVal.replace(/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u, '');
+                                }
+                                displayVal = cleanVal.trim();
+                            }
+                            l.text = displayVal;
+                            l.content = displayVal;
                             l.isHidden = false;
                             l.opacity = 1;
                         }

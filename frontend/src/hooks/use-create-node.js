@@ -37,6 +37,15 @@
                 action // 从 e.detail 中取出真正的 action 标识
             } = e.detail;
 
+            // 通用工具：循环剥除行首 Emoji（防止多次叠加残留）
+            const stripLeadingEmoji = (str) => {
+                let result = str;
+                while (/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u.test(result)) {
+                    result = result.replace(/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u, '');
+                }
+                return result.trim();
+            };
+
             // 辅助函数: 归一化活动项的键名 (同步内容节点的逻辑)
             const normalizeActivityItems = (items) => {
                 if (!items || !Array.isArray(items)) return items;
@@ -58,15 +67,19 @@
                         )?.[1] || '';
                     };
 
-                    if (!normalized.title) normalized.title = findInAllKeys(['标题', '主题', '名称', '活动', 'title', 'header']);
+                    // [FIX] 移除 '活动' 关键词，避免 '活动时间'/'活动地点' 等被错误匹配为 title
+                    if (!normalized.title) normalized.title = stripLeadingEmoji(findInAllKeys(['标题', '主题', '名称', 'title', 'header']));
                     if (!normalized.venue) normalized.venue = findInAllKeys(['地点', '场所', '场地', '地址', 'location', 'venue', 'address', 'subtitle']);
                     if (!normalized.date) normalized.date = findInAllKeys(['日期', '时间', '月份', 'date', 'time', 'calendar']);
                     if (!normalized.price) normalized.price = findInAllKeys(['门票', '价格', '票价', '费用', 'price', 'ticket', 'fee']);
 
+                    // [FIX] 无论 title 来自何处，统一剥除行首 emoji，保证内容节点与画布一致
+                    if (normalized.title) normalized.title = stripLeadingEmoji(normalized.title);
+
                     return {
                         ...item, // 先解开原始数据，保留所有原始 Key (如 "地点：")
                         id: item.id || Date.now() + Math.random(),
-                        title: normalized.title || item.title || '',
+                        title: normalized.title || stripLeadingEmoji(item.title || ''),
                         venue: normalized.venue || item.venue || '', // 归一化值作为最高优先级覆盖同名 Key
                         date: normalized.date || item.date || '',
                         year: normalized.year || item.year || '2026',
@@ -109,7 +122,7 @@
             };
 
             let textContent = activityContent || activityPrompt || '';
-    
+
 
             // 识别并解析 AI 的 JSON 指令源码
             if (textContent.trim().startsWith('{')) {
@@ -131,10 +144,13 @@
 
             // 仅在显示层面（如果需要）对 textContent 进行 Emoji 增强
             // 注意：不要修改 rawTextContent，它是交给 AI 解析的原始素材
+            // [FIX] 只给含冒号的行加 emoji，避免标题行被污染
             if (useEmoji && textContent && !textContent.includes('⏰')) {
                 const lines = textContent.split('\n');
                 const emojiLines = lines.map(line => {
                     const l = line.trim();
+                    const hasColon = l.includes(':') || l.includes('：');
+                    if (!hasColon) return line;
                     if (l.includes('时间') || l.includes('日期')) return l.startsWith('⏰') ? line : '⏰ ' + line;
                     if (l.includes('地点') || l.includes('场地')) return l.startsWith('📍') ? line : '📍 ' + line;
                     if (l.includes('门票') || l.includes('价格')) return l.startsWith('🎫') ? line : '🎫 ' + line;
@@ -168,7 +184,7 @@
 
                 // 仅当正则解析彻底失败（通常是对于极其凌乱的全文抓取文本）时，才调用 AI 进行语义提取
                 const isVeryMessy = !activities || activities.length === 0 || activities.some(it => !it.title || it.title.length < 2);
-                
+
                 // [Optimization] 如果是 create_rednote_node 路径，通常数据已经过后端预处理，不再进行 AI 二次提取
                 const skipAIExtract = action === 'create_rednote_node' || !isVeryMessy;
 
@@ -226,9 +242,25 @@
                     const Helpers = window.MagnesComponents?.Utils?.ParseHelpers;
                     const role = Helpers ? Helpers.normalizeRole(layer.semanticRole || layer.role || 'other') : 'other';
                     const roleList = roleGroups[role] || [];
-                    const activityIdx = roleList.indexOf(layer);
+                    const slotIdx = roleList.indexOf(layer); // 该 role 在模板中的第 N 个槽位
+
+                    // [PATCH] 标题层对位修正：
+                    // 如果模板的 title 槽位数 > activities 数，说明第0个 title 槽是"总标题"，
+                    // 后续 title 槽从 activities[0] 开始对应。
+                    // 如果 title 槽位数 == activities 数，则 1:1 直接对位。
+                    let activityIdx;
+                    if (role === 'title' && roleList.length > activities.length) {
+                        // 多出一个 title 槽 → 第0个是总标题页面槽，从第1个开始对应活动
+                        activityIdx = slotIdx - 1; // slotIdx=0 → -1 (总标题), slotIdx=1 → 0 (活动1)...
+                    } else {
+                        activityIdx = slotIdx;
+                    }
 
                     // 核心逻辑：第 N 个同角色的图块对应文本中解析出的第 N 个活动
+                    // activityIdx=-1 表示这是总标题（页面级）槽，直接保留模版原始文字，不注入内容
+                    if (activityIdx < 0) {
+                        return { ...layer, text: '', content: '' };
+                    }
                     const activity = activities[activityIdx] || activities[0] || {};
                     const rawRole = layer.semanticRole || layer.role || '';
 
@@ -249,8 +281,14 @@
 
                     // 极致兜底：如果还是没找到，且这一层是标题
                     if (!newText && (rawRole.includes('标题') || role === 'title')) {
-                        // 找 activity 里第一个非空的字符串值
-                        newText = Object.values(activity).find(v => typeof v === 'string' && v.length > 0 && v !== activity.id);
+                        // [FIX] 不再从 activity 的任意字段取值（避免取到 ⏰/📍 等带 emoji 的 date/venue）
+                        // 优先尝试从 rawBlock 的第一行无冒号文本提取标题
+                        const rawBlock = activity.rawBlock || '';
+                        const firstLine = rawBlock.split('\n').map(l => l.trim()).find(l => l);
+                        if (firstLine) {
+                            const hasColon = firstLine.includes(':') || firstLine.includes('：');
+                            newText = hasColon ? '' : stripLeadingEmoji(firstLine);
+                        }
                     }
 
                     // 如果确实解析到了新内容，即便模版原本没有 {{ 也要替换
@@ -264,7 +302,14 @@
                         if (finalFallback.includes('{{')) {
                             const dataExists = Object.keys(activity).length > 0;
                             if (dataExists) {
-                                finalFallback = activity.title || activity.venue || activity.date || Object.values(activity).find(v => typeof v === 'string' && v.length > 0) || finalFallback;
+                                // [FIX] title 图层只能从 title 或 rawBlock 取，禁止 fallback 到 venue/date
+                                if ((rawRole.includes('标题') || role === 'title')) {
+                                    const rawBlock = activity.rawBlock || '';
+                                    const firstLine = rawBlock.split('\n').map(l => l.trim()).find(l => l);
+                                    finalFallback = activity.title || (firstLine ? stripLeadingEmoji(firstLine) : '') || finalFallback;
+                                } else {
+                                    finalFallback = activity[role] || activity.venue || activity.date || Object.values(activity).find(v => typeof v === 'string' && v.length > 0 && v !== activity.id) || finalFallback;
+                                }
                                 finalFallback = finalFallback.replace(/{{|}}/g, '').trim();
                             }
                         }

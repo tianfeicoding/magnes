@@ -27,7 +27,7 @@ class RerankEvent(Event):
     """排序完成事件"""
     results: List[dict]
     rewritten_queries: List[str] = []
-    original_count: int = 0  # [NEW] 过滤前的总数
+    original_count: int = 0  # 过滤前的总数
 
 class QueryRewriteEvent(Event):
     """问题改写完成事件"""
@@ -35,7 +35,7 @@ class QueryRewriteEvent(Event):
     rewritten_queries: List[str]
     collection: Optional[str] = None
     top_k: Optional[int] = None
-    selected_doc_ids: Optional[List[str]] = None # [NEW] 用户勾选的文档 ID
+    selected_doc_ids: Optional[List[str]] = None # 用户勾选的文档 ID
 
 # --- 工作流定义 ---
 
@@ -51,7 +51,7 @@ class StyleRetrievalWorkflow(Workflow):
         query = ev.get("query")
         collection = ev.get("collection", "knowledge_base")
         top_k = ev.get("top_k")
-        selected_doc_ids = ev.get("selected_doc_ids") # [NEW]
+        selected_doc_ids = ev.get("selected_doc_ids") # 
         if collection == "xhs_covers_v2":
              return QueryRewriteEvent(original_query=query, rewritten_queries=[query], collection=collection, top_k=top_k, selected_doc_ids=selected_doc_ids)
 
@@ -119,7 +119,7 @@ class StyleRetrievalWorkflow(Workflow):
                 rewritten_queries=queries,
                 collection=collection,
                 top_k=top_k,
-                selected_doc_ids=selected_doc_ids # [NEW]
+                selected_doc_ids=selected_doc_ids # 
             )
             
             print(f"DEBUG: [Workflow] ⬆️ Dispatching QueryRewriteEvent for {len(queries)} queries")
@@ -133,7 +133,7 @@ class StyleRetrievalWorkflow(Workflow):
                 rewritten_queries=[query],
                 collection=ev.get("collection"),
                 top_k=ev.get("top_k"),
-                selected_doc_ids=ev.get("selected_doc_ids") # [NEW]
+                selected_doc_ids=ev.get("selected_doc_ids") #
             )
 
     @step
@@ -177,7 +177,7 @@ class StyleRetrievalWorkflow(Workflow):
             collection_name=target_coll, 
             top_k=top_k,
             num_queries=len(rewritten_queries),
-            filters=filters # [NEW]
+            filters=filters # 
         )
         
         # 依次尝试改写后的问题（QueryFusionRetriever 内部会自动合并）

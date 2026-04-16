@@ -140,7 +140,7 @@ async def upsert_document(doc: Union[NoteDocument, GalleryDocument], user_id: st
     if isinstance(doc, NoteDocument):
         collection = get_xhs_collection()
         metadata = {
-            "doc_id": doc.id,  # [NEW] 显式添加 ID 字段以便于 LlamaIndex 过滤器使用
+            "doc_id": doc.id,  # 显式添加 ID 字段以便于 LlamaIndex 过滤器使用
             "user_id": user_id or "",  # 用户隔离
             "source_type": doc.source_type,
             "title": doc.title or "",

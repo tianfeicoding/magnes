@@ -45,13 +45,13 @@ from app.api.mcp_routes import router as mcp_router
 from app.api.prompt_routes import router as prompt_router
 from app.api.dialogue_routes import router as dialogue_router  # [Phase 1] 对话模式
 from app.api.rag_routes import router as rag_router, public_router as public_rag_router # [Phase 2] RAG 知识库
-from app.api.export_routes import router as export_router      # [NEW] 图片导出
-from app.api.auth import router as auth_router                # [NEW] FastAPI-Users 认证路由
-from app.api.auth_routes import router as config_router        # [NEW] 配置管理路由
-from app.api.painter_routes import router as painter_router    # [NEW] AI 绘图
-from app.memory.routes import router as memory_router          # [NEW] 记忆系统
-from app.core.users import fastapi_users, auth_backend, current_user  # [NEW] FastAPI-Users
-from app.middleware.auth import AuthMiddleware                  # [NEW] 认证中间件
+from app.api.export_routes import router as export_router      # 图片导出
+from app.api.auth import router as auth_router                # FastAPI-Users 认证路由
+from app.api.auth_routes import router as config_router        # 配置管理路由
+from app.api.painter_routes import router as painter_router    # AI 绘图
+from app.memory.routes import router as memory_router          # 记忆系统
+from app.core.users import fastapi_users, auth_backend, current_user  # FastAPI-Users
+from app.middleware.auth import AuthMiddleware                  # 认证中间件
 
 # [启动自检] 检查环境变量是否加载成功
 if os.getenv("API_KEY"):
@@ -282,17 +282,21 @@ app.include_router(prompt_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(dialogue_router, prefix="/api/v1", dependencies=common_deps)  # [Phase 1] 对话模式 SSE (已添加认证)
 app.include_router(public_rag_router, prefix="/api/v1")                         # [Phase 2] RAG 公共接口 (图片等)
 app.include_router(rag_router, prefix="/api/v1")                               # [Phase 2] RAG 业务接口 (内部已使用 current_user)
-app.include_router(export_router, prefix="/api/v1", dependencies=common_deps)    # [NEW] 图片导出
-app.include_router(auth_router, prefix="/api/v1")                               # [NEW] FastAPI-Users 认证路由 (自带鉴权)
-app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # [NEW] 配置管理路由
-app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # [NEW] AI 绘图
-app.include_router(memory_router, prefix="/api/v1", dependencies=common_deps)   # [NEW] 记忆系统
+app.include_router(export_router, prefix="/api/v1", dependencies=common_deps)    # 图片导出
+app.include_router(auth_router, prefix="/api/v1")                               # FastAPI-Users 认证路由 (自带鉴权)
+app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # 配置管理路由
+app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # AI 绘图
+app.include_router(memory_router, prefix="/api/v1", dependencies=common_deps)   # 记忆系统
 
 # --- 挂载静态文件 (Frontend) ---
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# 页面路由 - 显式映射 rag.html 和 magnes（必须在根路径 StaticFiles 之前定义）
+# 页面路由 - 显式映射根路径、rag.html 和 magnes（避免根路径 StaticFiles mount 拦截 API 的 redirect_slashes）
+@app.get("/")
+async def serve_index():
+    return FileResponse(os.path.join(backend_dir, "../frontend/index.html"))
+
 @app.get("/rag.html")
 async def serve_rag():
     return FileResponse(os.path.join(backend_dir, "../frontend/rag.html"))
@@ -301,9 +305,7 @@ async def serve_rag():
 async def serve_magnes():
     return FileResponse(os.path.join(backend_dir, "../frontend/index.html"))
 
-# 静态资源 (js, css, fonts 等)
-# 注意：根路径 / 的 html=True 会兜底返回 index.html，但必须在显式路由之后定义，否则它会拦截 /magnes 等路径
-app.mount("/", StaticFiles(directory=os.path.join(backend_dir, "../frontend"), html=True), name="frontend")
+# 静态资源 (js, css, fonts 等) — 精确挂载子目录，避免根路径 mount 拦截 API 路由
 app.mount("/js", StaticFiles(directory=os.path.join(backend_dir, "../frontend/js")), name="js")
 app.mount("/css", StaticFiles(directory=os.path.join(backend_dir, "../frontend/css")), name="css")
 app.mount("/core", StaticFiles(directory=os.path.join(backend_dir, "../frontend/core")), name="core")

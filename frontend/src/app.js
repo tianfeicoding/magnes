@@ -202,6 +202,7 @@
         const [draftModalOpen, setDraftModalOpen] = useState(false);
         const [isDraftReadOnly, setIsDraftReadOnly] = useState(false);
         const [draftContent, setDraftContent] = useState('');
+        const [draftInitialMsg, setDraftInitialMsg] = useState(null); // [NEW] 恢复草稿箱的 useEmoji 状态
         const [draftTemplateId, setDraftTemplateId] = useState(null); // [NEW] 灵感助手选中的模版 ID
         const [currentDraftMsgId, setCurrentDraftMsgId] = useState(null); // [NEW] 当前正在草稿箱编辑的消息 ID
         const [publishModalOpen, setPublishModalOpen] = useState(false);
@@ -309,6 +310,7 @@
         useWindowEvents({
             setMessages, setPublishData, setPublishModalOpen,
             setDraftContent, setIsDraftReadOnly, setDraftModalOpen, setDraftTemplateId, setCurrentDraftMsgId,
+            setDraftInitialMsg, // [NEW]
             currentDraftMsgId,
             setNodes, setEdges, setActiveTab,
             handleCreateNodeRequest,
@@ -443,6 +445,7 @@
                     setDraftModalOpen={setDraftModalOpen}
                     draftContent={draftContent}
                     setDraftContent={setDraftContent}
+                    draftInitialMsg={draftInitialMsg}
                     isDraftReadOnly={isDraftReadOnly}
                     draftTemplateId={draftTemplateId}
                     setDraftTemplateId={setDraftTemplateId}

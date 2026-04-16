@@ -25,6 +25,7 @@
         setDraftModalOpen,
         draftContent,
         setDraftContent,
+        draftInitialMsg,
         isDraftReadOnly,
         draftTemplateId,
         setDraftTemplateId,
@@ -351,6 +352,7 @@
                         setDraftEditCallback(null);
                     },
                     initialContent: draftContent,
+                    initialMsg: draftInitialMsg,
                     isReadOnly: isDraftReadOnly,
                     isEditMode: isDraftEditMode,
                     onConfirm: (newContent) => {

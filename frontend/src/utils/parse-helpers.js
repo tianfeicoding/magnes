@@ -11,6 +11,18 @@
          */
         parseActivities: (text) => {
             if (!text) return [];
+
+            // [PATCH] 剥离行首 Emoji 前缀，用于 title 字段净化
+            // 使用精确的 Emoji Unicode 范围正则，避免误剥中文字符
+            const stripLeadingEmoji = (str) => {
+                // 只匹配真正的 emoji/符号范围，不影响 CJK 汉字；循环剥去多个连续 emoji
+                let result = str;
+                while (/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u.test(result)) {
+                    result = result.replace(/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u, '');
+                }
+                return result.trim();
+            };
+
             // 强化分割逻辑：支持双换行、单换行+标题行特征（如第一行无冒号）等复合场景
             let blocks = text.split(/\n\s*\n/).filter(b => b.trim());
             
@@ -81,8 +93,11 @@
                     }
 
                     if (colonIdx !== -1) {
-                        const key = line.slice(0, colonIdx).trim();
-                        const val = line.slice(colonIdx + 1).trim();
+                        // 先剥去行首 emoji，再提取 key/val，确保「⏰ 时间：」能正确匹配 date
+                        const lineStripped = emojiChar ? line.slice(emojiChar.length).trim() : line;
+                        const colonIdx2 = lineStripped.search(/[:：]/);
+                        const key = colonIdx2 !== -1 ? lineStripped.slice(0, colonIdx2).trim() : lineStripped;
+                        const val = colonIdx2 !== -1 ? lineStripped.slice(colonIdx2 + 1).trim() : '';
                         let matched = false;
                         for (const [role, keywords] of Object.entries(keyMap)) {
                             if (keywords.some(kw => key.includes(kw))) {
@@ -96,9 +111,9 @@
                             activity[emojiMap[emojiChar]] = val;
                             matched = true;
                         }
-                        // 再次兜底：第一行作为标题
+                        // 再次兜底：第一行作为标题（剥去 emoji 前缀）
                         if (!matched && !titleSet && idx === 0) {
-                            activity.title = line;
+                            activity.title = stripLeadingEmoji(line);
                             titleSet = true;
                         }
                     } else if (emojiChar) {
@@ -106,8 +121,8 @@
                         const val = line.slice(emojiChar.length).trim();
                         activity[emojiMap[emojiChar]] = val;
                     } else if (!titleSet) {
-                        // 无冒号且未设置标题的行，作为标题
-                        activity.title = line;
+                        // 无冒号且未设置标题的行，作为标题（剥去 emoji 前缀）
+                        activity.title = stripLeadingEmoji(line);
                         titleSet = true;
                     }
                 });

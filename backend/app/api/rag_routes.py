@@ -690,14 +690,15 @@ from pathlib import Path
 async def get_rag_image(category: str, image_id: str):
     from fastapi.responses import FileResponse
     from app.rag.ingestion.doc_parser import _get_images_dir
-    
+
     # 统一获取物理目录
     base_knowledge_dir = Path(_get_images_dir())
-    base_storage = Path("backend/data/rag_images") # 兜底逻辑
-    
+    # 使用当前文件绝对路径定位 data/rag_images，避免相对路径因启动目录不同而 404
+    base_storage = Path(__file__).parent.parent.parent / "data" / "rag_images"
+
     if category == "knowledge":
         file_path = base_knowledge_dir / image_id
-    else: 
+    else:
         file_path = base_storage / category / image_id
         
     # 自动补全后缀逻辑
@@ -879,7 +880,7 @@ class RagChatRequest(BaseModel):
     message: str
     conversationId: str = "default"
     history: Optional[List[dict]] = []
-    extraContext: Optional[dict] = None  # [NEW] 携带文档摘要和标签
+    extraContext: Optional[dict] = None  # 携带文档摘要和标签
 
 async def rag_chat_generator(request: RagChatRequest):
     """
@@ -922,7 +923,7 @@ async def rag_chat_generator(request: RagChatRequest):
         handler = wf.run(
             query=request.message, 
             collection=collection,
-            selected_doc_ids=selected_ids,  # [NEW] 透传勾选 ID
+            selected_doc_ids=selected_ids,  # 透传勾选 ID
             extra_context=request.extraContext  #  透传上下文到工作流
         )
         

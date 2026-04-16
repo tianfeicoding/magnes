@@ -48,7 +48,7 @@
             });
         }, [critic_report, generated_image, source_image, style_evolution]);
 
-        // 当前选中的版本号（0=V0原图, 1=V1, 2=V2...）- [FIX] 默认选中最后一个（最新版本）
+        // 当前选中的版本号（0=V0原图, 1=V1, 2=V2...）- 默认选中最后一个（最新版本）
         const [selectedVersionId, setSelectedVersionId] = useState(null);
         const [copied, setCopied] = useState(false);
         const [isRegenerating, setIsRegenerating] = useState(false);
@@ -68,7 +68,7 @@
 
             // V0 - 原图版本
             if (source_image) {
-                // [FIX] 查找 style_evolution 中的 extract 版本作为 V0
+                // 查找 style_evolution 中的 extract 版本作为 V0
                 // extract 版本是原始提取的提示词
                 const v0Entry = style_evolution?.find(v => v.strategy === 'extract');
 
@@ -94,7 +94,7 @@
                 const optimizedVersions = style_evolution.filter(v => v.strategy !== 'extract');
 
                 optimizedVersions.forEach((v, idx) => {
-                    // [FIX] 显示版本号从 V1 开始（原图是 V0）
+                    // 显示版本号从 V1 开始（原图是 V0）
                     const displayVersion = idx + 1; // V1, V2, V3...
                     const isLatest = v.version === style_evolution[style_evolution.length - 1]?.version;
 
@@ -107,7 +107,7 @@
                         changes: v.changes || [],
                         critique: v.critique,
                         score: v.critic_report?.score !== undefined ? v.critic_report.score : v.score,
-                        critic_report: v.critic_report,  // [NEW] 保存完整的 critic_report
+                        critic_report: v.critic_report,  // 保存完整的 critic_report
                         _debugSource: v.critic_report?.score !== undefined ? 'critic_report.score' : 'v.score' // [DEBUG]
                     });
                 });
@@ -117,7 +117,7 @@
             return list;
         }, [source_image, generated_image, style_evolution, critic_report]);
 
-        // [FIX] 当前显示的内容 - 直接从选中的版本获取
+        // 当前显示的内容 - 直接从选中的版本获取
         const currentDisplay = useMemo(() => {
             // 如果没有选中版本，默认选中最后一个（最新）
             const targetVersionId = selectedVersionId !== null ? selectedVersionId : (versions.length > 0 ? versions[versions.length - 1].version : null);
@@ -340,8 +340,8 @@
                     sourceNodeId: source_node_id,
                     currentPrompt: style_prompt,
                     strategy: 'evolve',
-                    styleEvolution: style_evolution,  // [FIX] 传递版本历史（包含 critic_report）
-                    sourceImage: source_image  // [FIX] 传递原图 URL，用于再优化时对比
+                    styleEvolution: style_evolution,  // 传递版本历史（包含 critic_report）
+                    sourceImage: source_image  // 传递原图 URL，用于再优化时对比
                 }
             }));
 
@@ -355,7 +355,7 @@
             }));
         };
 
-        // 监听版本更新 - [FIX] 新版本生成时，选中最后一个（最新版本）
+        // 监听版本更新 - 新版本生成时，选中最后一个（最新版本）
         useEffect(() => {
             const handleVersionUpdate = (e) => {
                 if (e.detail?.validatorId === id) {
@@ -391,7 +391,7 @@
                     React.createElement('div', { className: "relative aspect-square bg-zinc-50" },
                         currentDisplay.image
                             ? React.createElement('img', {
-                                key: currentDisplay.image, // [FIX] 强制重新渲染
+                                key: currentDisplay.image, // 强制重新渲染
                                 src: currentDisplay.image,
                                 alt: currentDisplay.label,
                                 className: "w-full h-full object-contain"
@@ -484,7 +484,7 @@
                         : React.createElement('p', { className: "text-[10px] text-black leading-snug" },
                             currentDisplay.prompt || '无提示词'
                         ),
-                    // [FIX] 优化建议（从 critic_report 获取）
+                    // 优化建议（从 critic_report 获取）
                     !isEditingPrompt && (currentDisplay.improvementSuggestion || currentDisplay.critique) && React.createElement('div', { className: "mt-2 pt-2 border-t border-black/10" },
                         React.createElement('div', { className: "text-[8px] font-bold text-black/60 mb-1" }, "优化建议:"),
                         React.createElement('p', { className: "text-[9px] text-black/80 leading-snug" },
@@ -498,11 +498,11 @@
                     React.createElement('span', { className: "text-[10px] font-bold text-yellow-700" }, "💡 提示词已编辑，点击「优化已编辑」应用更改")
                 ),
 
-                // 版本 panel（内置）- [FIX] 与风格分析节点一致，直接显示 V0, V1, V2
+                // 版本 panel（内置）- 与风格分析节点一致，直接显示 V0, V1, V2
                 versions.length > 0 && React.createElement('div', { className: "border border-black p-2 bg-white" },
                     React.createElement('div', { className: "text-[10px] font-bold text-black mb-2" }, `版本历史 (${versions.length})`),
                     React.createElement('div', { className: "flex flex-col gap-1" },
-                        // [FIX] 倒序显示所有版本 V2, V1, V0...（最新的在前）
+                        // 倒序显示所有版本 V2, V1, V0...（最新的在前）
                         [...versions].reverse().map((v) => {
                             return React.createElement('button', {
                                 key: v.version,

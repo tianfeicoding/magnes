@@ -69,17 +69,16 @@ async def _check_fast_paths(last_msg: str, state: PlannerState) -> Optional[dict
     
     if any(kw in last_msg for kw in ["时间:", "地点:", "门票:", "时间：", "地点：", "门票："]) and len(last_msg) > 50:
         templates = await get_available_templates_metadata()
-        reply_content = "✅ 已成功提取活动信息！\n\n请告诉我您想使用哪一个模版："
         mock_decision = {
-            "thought": "检测到已知活动信息，直接选择模版。",
-            "action": "chat",
+            "thought": "检测到已知活动信息，直接提取并进入草稿，不在此处生成回复语，交给 CreativeAgent 处理。",
+            "action": "summary_draft",
             "is_fast_path": True,
-            "parameters": {"content": last_msg}, 
-            "reply": reply_content,
-            "follow_up_reply": "请告诉我您想使用哪一个模版：",
+            "parameters": {"content": last_msg},
+            "reply": "",
+            "follow_up_reply": "",
             "templates": templates
         }
-        return {"messages": [AIMessage(content=reply_content)], "final_decision": mock_decision}
+        return {"messages": [], "final_decision": mock_decision}
 
     if "[技能指令] 确认选择模版:" in last_msg:
         id_match = re.search(r"\(ID: ([\w\-]+)\)", last_msg)

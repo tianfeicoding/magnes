@@ -20,6 +20,7 @@
         setDraftModalOpen,
         setDraftTemplateId,
         setCurrentDraftMsgId,
+        setDraftInitialMsg,
         currentDraftMsgId,
         setNodes,
         setEdges,
@@ -58,11 +59,17 @@
 
             // 2. 打开草稿箱编辑
             const handleDraftEvent = (e) => {
-                setDraftContent(e.detail.content || '');
+                // [PATCH] 终极数据还原：优先尝试从消息参数中恢复原始干货内容
+                const msg = e.detail.msg;
+                const rawContent = msg?.parameters?.raw_draft_content || e.detail.content || '';
+
+                setDraftContent(rawContent.replace(/\\n/g, '\n'));
                 setIsDraftReadOnly(false);
                 if (setDraftTemplateId) setDraftTemplateId(e.detail.templateId || null);
                 // 锁定当前编辑的消息 ID
                 if (setCurrentDraftMsgId) setCurrentDraftMsgId(e.detail.msgId || null);
+                // [NEW] 保留完整 msg，用于恢复 useEmoji 等状态
+                if (setDraftInitialMsg) setDraftInitialMsg(msg || null);
                 setDraftModalOpen(true);
             };
             window.addEventListener('magnes:open_draft_modal', handleDraftEvent);

@@ -28,7 +28,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     # Public GET endpoints
     PUBLIC_GET_ENDPOINTS = [
-        "/api/v1/templates",
         "/api/v1/rag/documents",
         "/api/v1/rag/stats",
         "/api/v1/rag/knowledge/documents",

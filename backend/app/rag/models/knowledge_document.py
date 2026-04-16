@@ -40,4 +40,4 @@ class KnowledgeChunk(BaseModel):
     category: str = "通用资料"                               # 继承文档分类
     global_summary: str = ""                             # 全局摘要，增强检索上下文
     global_tags: List[str] = Field(default_factory=list)  # 全局关键词
-    image_path: Optional[str] = None                     # [NEW] 图片分块对应的本地存储路径
+    image_path: Optional[str] = None                     # 图片分块对应的本地存储路径

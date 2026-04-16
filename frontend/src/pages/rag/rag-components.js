@@ -161,7 +161,7 @@
                     className: `absolute top-2 left-2 w-6 h-6 border border-black flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 ${doc.rating === 'good' ? 'bg-black text-white' : 'bg-white/80 backdrop-blur-sm text-black hover:bg-black hover:text-white'} z-20`,
                     onClick: (e) => { e.stopPropagation(); onRating && onRating(doc.id, doc.rating === 'good' ? 'unrated' : 'good'); }
                 }, h(Icons.Star || 'span', { size: 12, fill: doc.rating === 'good' ? 'white' : 'none' })),
-                // [NEW] 右上角删除按钮
+                // 右上角删除按钮
                 onDelete && h('button', {
                     className: 'absolute top-2 right-2 w-6 h-6 border border-black bg-white/80 backdrop-blur-sm text-black flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-20 hover:bg-black hover:text-white',
                     onClick: (e) => { e.stopPropagation(); onDelete(doc.id); }

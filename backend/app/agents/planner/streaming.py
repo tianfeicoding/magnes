@@ -10,7 +10,7 @@ async def handle_stream_events(planner_graph, input_data, config, message: str, 
     """处理 LangGraph 事件流并产生 SSE 事件"""
     sent_event_ids = set()
     sent_actions = set()
-    last_reply_content = None # [NEW] 记录最近一次发送的回复内容，防止重复推送
+    last_reply_content = None # 记录最近一次发送的回复内容，防止重复推送
     try:
         async for event in planner_graph.astream_events(input_data, config, version="v2"):
             kind = event["event"]

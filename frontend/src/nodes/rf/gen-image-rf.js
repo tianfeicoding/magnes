@@ -196,7 +196,7 @@
             setConnectedImages(imgs);
         }, [edges, data, getConnectedImages]);
 
-        // [New] 自动适配比例逻辑
+        // 自动适配比例逻辑
         const lastAutoRatioImageUrl = useRef(null);
         useEffect(() => {
             if (connectedImages.length > 0) {

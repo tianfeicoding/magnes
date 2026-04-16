@@ -52,17 +52,28 @@
                 keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())) && v && typeof v === 'string'
             )?.[1] || '';
         };
+        const stripLeadingEmoji = (str) => {
+            let result = str;
+            while (/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u.test(result)) {
+                result = result.replace(/^[\u{1F300}-\u{1FFFF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}][\s\uFE0F]*/u, '');
+            }
+            return result.trim();
+        };
 
-        if (!normalized.title) normalized.title = findInAllKeys(['标题', '主题', '名称', '活动', 'title', 'header']);
+        // [FIX] 移除 '活动' 关键词，避免 '活动时间'/'活动地点' 等被错误匹配为 title
+        if (!normalized.title) normalized.title = stripLeadingEmoji(findInAllKeys(['标题', '主题', '名称', 'title', 'header']));
         if (!normalized.venue) normalized.venue = findInAllKeys(['地点', '场所', '场地', '地址', 'location', 'venue', 'address', 'subtitle']);
         if (!normalized.date) normalized.date = findInAllKeys(['日期', '时间', '月份', 'date', 'time', 'calendar']);
         if (!normalized.price) normalized.price = findInAllKeys(['门票', '价格', '票价', '费用', 'price', 'ticket', 'fee']);
+
+        // [FIX] 无论 title 来自何处，统一剥除行首 emoji，保证内容节点与画布一致
+        if (normalized.title) normalized.title = stripLeadingEmoji(normalized.title);
 
         // 确保必要的字段存在且格式正确，同时保留 item 原有字段作为极致兜底
         return {
             ...item, // 先解开原始数据，保留所有原始 Key
             id: item.id || Date.now() + Math.random(),
-            title: normalized.title || item.title || '',
+            title: normalized.title || stripLeadingEmoji(item.title || ''),
             venue: normalized.venue || item.venue || '',
             date: normalized.date || item.date || '',
             year: normalized.year || item.year || '2026',
