@@ -1,6 +1,6 @@
 """
 Planner 核心 Agent 节点
-不再承担巨无霸参数提取，已被降级为全路由专家架构的【极速分流关卡 Router Node】。
+不再承担巨无霸参数提取，已被降级为全路由专家架构的【极速分流关卡 Supervisor Node】。
 """
 import os
 import re
@@ -127,7 +127,7 @@ async def _check_fast_paths(last_msg: str, state: PlannerState) -> Optional[dict
 
     # 【视觉类技能指令强路由拦截】
     if "电商生图Skill" in last_msg:
-         print(f"[Router Agent] ⚡️ 检测到 UI 指令按钮，强制分流至 Designer Expert", flush=True)
+         print(f"[Supervisor Agent] ⚡️ 检测到 UI 指令按钮，强制分流至 Designer Expert", flush=True)
          mock_decision = {
             "thought": "用户点击了电商生图按钮，强制投递到设计师专家节点进行商品识别。",
             "action": "route_to_designer",
@@ -138,13 +138,13 @@ async def _check_fast_paths(last_msg: str, state: PlannerState) -> Optional[dict
     return None
 
 async def call_model(state: PlannerState):
-    """Router Agent 意图分发中枢。
+    """Supervisor Agent 意图分发中枢。
     【全路由专家架构核心】：不再处理任何冗长的业务提示词拼装，只负责在极短时间内判定 action 并交由后置网关路由。
     """
     from app.rag import config
     base_url, api_key = await get_llm_config(is_layering=False)
     model_name = config.DEFAULT_PLANNER_MODEL
-    print(f"[Router Agent] ⚡️ 极速分拣中心已启动, 模型: {model_name}", flush=True)
+    print(f"[Supervisor Agent] ⚡️ 极速分拣中心已启动, 模型: {model_name}", flush=True)
 
     messages = state.get("messages", [])
     last_msg = str(messages[-1].content) if messages else ""
@@ -190,7 +190,7 @@ async def call_model(state: PlannerState):
             parsed["reply"] = "✅ 极速分拣已确认您的指令，正在处理中..."
         final_decision = parsed if parsed else {"action": "chat", "reply": response_content}
     except Exception as e:
-        print(f"[Router Agent] 异常: {e}", flush=True)
+        print(f"[Supervisor Agent] 异常: {e}", flush=True)
         final_decision = {"action": "chat", "reply": "意图调度出错，请重试。"}
 
     VALID_ACTIONS = {
@@ -208,5 +208,5 @@ async def call_model(state: PlannerState):
         final_decision["reply"] = ""
     
     update = {"final_decision": final_decision}
-    print(f"[Router Agent] 🎯 极速裁决完成 -> Action: {final_decision.get('action')}", flush=True)
+    print(f"[Supervisor Agent] 🎯 极速裁决完成 -> Action: {final_decision.get('action')}", flush=True)
     return update

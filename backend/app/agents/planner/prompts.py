@@ -4,7 +4,7 @@ Planner 及各独立专家的提示词定义 (Multi-Agent Refactored)
 """
 
 # ==========================================
-# 1. 极速调度中枢 (Router Agent) 
+# 1. 极速调度中枢 (Supervisor Agent) 
 # （保留了原始的所有行动指引、枚举列表、闭环架构以及 JSON 格式底座）
 # ==========================================
 ROUTER_PROMPT = """你是 Magnes Studio 的智能操作助手（Planner）。

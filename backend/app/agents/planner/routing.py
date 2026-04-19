@@ -5,7 +5,7 @@ Planner 路由逻辑
 from .state import PlannerState
 
 def route_decision(state: PlannerState):
-    """LangGraph 路由逻辑 (基于新 Router 架构的星型分发)"""
+    """LangGraph 路由逻辑 (基于新 Supervisor 架构的星型分发)"""
     decision = state.get("final_decision") or {}
     action = decision.get("action")
     print(f"[Planner Routing] 星型枢纽接收状态: Action={action}")

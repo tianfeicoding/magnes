@@ -1,7 +1,7 @@
 """
 Planner 图定义 (Star Topology Multi-Agent Refactored)
 使用 LangGraph 构建任务编排图。
-通过 Router (planner_agent) 将意图快速分发给四大独立专家 (designer, creative, knowledge, security)，实现最纯粹的星型并发架构。
+通过 Supervisor (planner_agent) 将意图快速分发给四大独立专家 (designer, creative, knowledge, security)，实现最纯粹的星型并发架构。
 """
 import os
 from langgraph.graph import StateGraph, START, END
@@ -35,7 +35,7 @@ async def init_planner_graph():
     workflow = StateGraph(PlannerState)
     
     # ======== 1. 注册核心中枢与专家节点 ========
-    workflow.add_node("planner_agent", call_model) # Router 中枢
+    workflow.add_node("planner_agent", call_model) # Supervisor 中枢
     workflow.add_node("designer_agent", call_designer_model)
     workflow.add_node("creative_agent", call_creative_model)
     workflow.add_node("knowledge_agent", knowledge_agent_node)
@@ -60,7 +60,7 @@ async def init_planner_graph():
     # 起点直达路由中枢
     workflow.add_edge(START, "planner_agent")
     
-    # Router 依据 route_decision 扇出
+    # Supervisor 依据 route_decision 扇出
     workflow.add_conditional_edges("planner_agent", route_decision, {
         "designer_agent": "designer_agent",
         "creative_agent": "creative_agent",

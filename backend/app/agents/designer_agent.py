@@ -1,6 +1,6 @@
 """
 Designer Agent / Painter Expert
-负责在 Router 判定用户涉及视觉生成、改图意图后，承接处理后续的参数提取与多轮对话。
+负责在 Supervisor 判定用户涉及视觉生成、改图意图后，承接处理后续的参数提取与多轮对话。
 包含画布生成提示词优化与金句收藏的核心业务逻辑。
 """
 import json
