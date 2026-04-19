@@ -115,6 +115,53 @@ graph LR
 ```
 
 
+### 2.5 项目持久化与操作日志架构
+
+```mermaid
+graph LR
+    subgraph ProjectLayer["项目持久化层 (Project Persistence)"]
+        ProjectAPI["/api/v1/projects
+项目 CRUD"]
+        SnapshotAPI["/api/v1/projects/{id}/snapshots
+快照管理"]
+        ActionLogAPI["/api/v1/projects/action-log
+操作日志"]
+        MemoryAPI["/api/v1/projects/analyze-memory
+记忆回流"]
+    end
+
+    subgraph Frontend["前端"]
+        AppCanvas["ReactFlow 画布"]
+        MyProjects["我的项目 Tab"]
+        AutoSave["自动保存\n(debounce 2s)"]
+    end
+
+    subgraph Storage2["SQLite 存储"]
+        ProjectsDB["projects 表\n(nodes/edges/viewport)"]
+        SnapshotsDB["project_snapshots 表"]
+        ActionLogsDB["canvas_action_logs 表"]
+        UserMemDB["user_memories 表"]
+    end
+
+    AppCanvas --> AutoSave
+    AutoSave --> ProjectAPI
+    MyProjects --> ProjectAPI
+    ProjectAPI --> ProjectsDB
+    SnapshotAPI --> SnapshotsDB
+    ActionLogAPI --> ActionLogsDB
+    MemoryAPI --> UserMemDB
+
+    AppCanvas -.->|关键操作| ActionLogAPI
+    AutoSave -.->|每5分钟| MemoryAPI
+```
+
+**核心设计**：
+- **Project 表**：独立存储画布快照（nodes, edges, viewport），与记忆系统解耦
+- **自动保存**：前端 `nodes`/`edges` 变化后 2 秒 debounce 触发 `PUT /projects/{id}`
+- **刷新恢复**：`GET /projects/last/active` 返回用户最后编辑的项目
+- **CanvasActionLog**：记录细粒度操作（节点创建/删除/连线、背景替换、导出等），支持语义检索
+- **记忆回流**：LLM 定期分析操作日志，提取偏好写入 `user_memories`
+
 ## 3. 认证与安全架构
 
 ### 3.1 用户认证系统
@@ -238,7 +285,21 @@ graph LR
 5. **分页与批量导出**
    - 支持多页内容切换（`currentPage`）
    - 每页独立覆写样式（`pageOverrides`）
-   - 批量导出使用 html2canvas 串行处理，防止内存溢出
+   - 图片层和文字层的分页数据路由（`pageOffset * itemsPerPage`）
+   - **导出引擎**：使用 `html-to-image`（已替换 html2canvas），通过 SVG foreignObject 序列化 DOM，解决文字偏移问题
+   - 导出时克隆画布 DOM，wrapper 设置 `opacity:0` 隐藏，clone 保持 `position:static`，避免 off-screen 样式被序列化
+   - 支持单页导出（当前页）和批量导出（串行处理防止内存溢出）
+
+6. **背景替换**
+   - **本地上传**：FileReader 读取本地图片，更新背景图层 URL（base64）
+   - **AI 生成**：调用 `/painter/generate/background`，支持 `txt2img` 和 `img2img` 模式
+   - **素材库选取**：通过 `magnes:switch_ext_tab` 事件打开右侧素材库侧边栏，选择后自动切回画布 Tab
+   - 背景图层自动识别（role/id/type 包含 'background'），不存在时自动创建新背景层
+
+7. **素材库集成**
+   - 精细编排节点通过全局事件与右侧素材库通信
+   - `magnes:switch_ext_tab` 打开素材库并携带 `targetNodeId` + `targetLayerId`
+   - 素材选中后通过 `magnes:switch_ext_tab` 回调更新对应图层 URL
 
 ### 4.2 API 服务层（FastAPI）
 
@@ -256,6 +317,7 @@ graph LR
 | `/api/v1/export` | `api/export_routes.py` | Playwright 截图导出 |
 | `/api/v1/mcp` | `api/mcp_routes.py` | MCP 工具调用代理 |
 | `/api/v1/prompt` | `api/prompt_routes.py` | Prompt 模版管理 |
+| `/api/v1/projects` | `api/project_routes.py` | 项目持久化（CRUD、快照、操作日志、记忆回流） |
 
 **关键中间件**：
 - `CORSMiddleware`：跨域处理（当前配置需收紧）
@@ -437,13 +499,34 @@ Skill 是 Magnes 中可插拔的业务能力模块，位于 `backend/.agent/skil
 - `memory_type="memory"`、`key="memory_md"`、`confidence=1.0`
 - 每个用户每种文档最多一条，按 `user_id + memory_type + key` 联合唯一约束做 upsert。
 
+**CanvasActionLog 记录机制**：
+- 前端关键操作（节点创建/删除/连线、背景替换、导出图片）主动发送 `POST /projects/action-log`
+- 项目保存（create/update/delete）时后端自动写入 CanvasActionLog
+- 日志包含：action_type、target_node_id、payload（JSON）、description（语义化描述）
+- 记录失败不影响主流程
+
+**记忆回流（Memory Reflux）**：
+```
+用户操作画布 → CanvasActionLog 记录 → 定期（每5分钟）LLM 分析
+                                              ↓
+                                    提取 preference/style/rejection/workflow
+                                              ↓
+                                    写入/更新 user_memories 表
+                                              ↓
+                                    下次对话注入 Planner system prompt
+```
+- 分析接口：`POST /projects/analyze-memory`（分析最近 100 条日志）
+- 预览接口：`GET /projects/memory-analysis/preview`（不写入数据库）
+- LLM 模型：`gpt-4o-mini`，输出结构化 JSON（memory_type、key、content、confidence、evidence）
+- 去重更新：同类型同 key 的记忆更新 content 和 confidence，追加 evidence
+
 **注入流程**：
 1. `dialogue_routes.py` 在调用 `run_planner()` 前，请求 `memory_service.build_memory_summary_for_injection(user_id)`。
 2. 服务层按以下顺序组装文本：
    - Soul.md（若存在）
    - MEMORY.md（若存在）
-   - preference 列表（后端已支持，当前无前端入口）
-   - rejection 列表（后端已支持，当前无前端入口）
+   - preference 列表（从 CanvasActionLog 分析结果自动提取）
+   - rejection 列表（从 CanvasActionLog 分析结果自动提取）
 3. `run_planner()` 将摘要写入 `PlannerState.memory_summary`。
 4. `router.py` 的 `call_model()` 在 `ROUTER_PROMPT` 前追加 `[用户设定]\n{memory_summary}\n\n---\n\n`。
 
@@ -590,6 +673,61 @@ sequenceDiagram
     L-->>R: 优化后的文本
     R-->>F: {status: "success", result: "..."}
     F->>F: 替换选中文本或展示预览
+```
+
+### 5.6 项目自动保存序列
+
+```mermaid
+sequenceDiagram
+    participant F as ReactFlow 画布
+    participant FE as 前端 app.js
+    participant PR as ProjectAPI
+    participant DB as SQLite
+
+    F->>FE: 用户拖拽/编辑节点（nodes/edges变化）
+    FE->>FE: 清除上一定时器，启动 2s debounce
+    Note over FE: 2秒后触发自动保存
+    FE->>PR: PUT /api/v1/projects/{id} {nodes, edges, viewport, actionHint: "auto_save"}
+    PR->>DB: UPDATE projects 表
+    PR->>DB: INSERT canvas_action_logs（action_type="auto_save"）
+    PR-->>FE: {status: "success"}
+    FE->>FE: 记录 lastMemoryAnalysisRef
+    Note over FE: 每隔5分钟触发记忆分析
+    FE->>PR: POST /api/v1/projects/analyze-memory {limit: 100}
+    PR->>DB: SELECT canvas_action_logs（最近100条）
+    PR->>OpenAI: LLM 分析日志提取偏好
+    OpenAI-->>PR: {preferences: [...], summary: "..."}
+    PR->>DB: UPSERT user_memories（preference/style/rejection/workflow）
+    PR-->>FE: {status: "success", extracted: [...]}
+```
+
+### 5.7 记忆回流序列
+
+```mermaid
+sequenceDiagram
+    participant AL as CanvasActionLog
+    participant PR as ProjectRoutes
+    participant LLM as LLM (gpt-4o-mini)
+    participant UM as UserMemory
+    participant PL as Planner Agent
+
+    AL->>PR: 积累用户操作日志（node_create/asset_replace/edge_connect等）
+    Note over PR: 定时触发（每5分钟）或手动触发
+    PR->>LLM: 发送最近100条日志描述文本
+    LLM->>LLM: 分析用户行为模式
+    LLM-->>PR: {preferences: [{memory_type, key, content, confidence, evidence}]}
+    PR->>UM: 查询是否已有同类型同key记忆
+    UM-->>PR: 返回现有记忆或null
+    alt 已存在
+        PR->>UM: UPDATE content/confidence/evidence
+    else 不存在
+        PR->>UM: INSERT 新记忆
+    end
+    Note over PL: 下次对话时
+    PL->>UM: build_memory_summary_for_injection(user_id)
+    UM-->>PL: Soul.md + MEMORY.md + preference + rejection
+    PL->>PL: 拼接到 ROUTER_PROMPT 前
+    PL->>OpenAI: LLM 推理（带用户偏好上下文）
 ```
 
 ## 6. 错误与回退策略

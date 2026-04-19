@@ -5,6 +5,10 @@
     const Settings = Icons.Settings || (() => null);
     const User = Icons.User || (() => null);
     const LogOut = Icons.LogOut || (() => null);
+    const Plus = Icons.Plus || (() => null);
+    const ChevronDown = Icons.ChevronDown || (() => null);
+    const Layout = Icons.Layout || (() => null);
+    const Check = Icons.Check || (() => null);
 
     /**
      * 应用顶部导航栏组件
@@ -15,6 +19,9 @@
         setActiveTab,
         loadStats,
         setSettingsOpen,
+        // 项目相关
+        projectName,
+        onNewProject,
         // 用户认证相关
         user,
         isLoggedIn,
@@ -28,7 +35,16 @@
 
         return (
             <div className="h-16 bg-white border-b border-black flex items-center px-6 justify-between shrink-0 z-[100] relative">
-                <h1 className="font-bold text-2xl text-black tracking-tighter">Magnes</h1>
+                <div className="flex items-center gap-3">
+                    <h1 className="font-bold text-2xl text-black tracking-tighter">Magnes</h1>
+
+                    {/* 当前项目名称（仅展示） */}
+                    {isLoggedIn && (
+                        <span className="text-[12px] text-zinc-400 font-bold max-w-[120px] truncate">
+                            {projectName || '未命名项目'}
+                        </span>
+                    )}
+                </div>
 
                 {/* 中央 Tab 切换区域 */}
                 <div className="flex items-center -space-x-[1px] absolute left-1/2 -translate-x-1/2">
@@ -36,7 +52,8 @@
                         { key: 'canvas', label: '工作流画布' },
                         { key: 'knowledge', label: '品牌知识库' },
                         { key: 'xhs', label: '笔记灵感库' },
-                        { key: 'gallery', label: 'AI生图库' }
+                        { key: 'gallery', label: 'AI生图库' },
+                        { key: 'my-projects', label: '我的项目' }
                     ].map(tab => (
                         <button
                             key={tab.key}
@@ -50,7 +67,16 @@
 
                 {/* 右侧操作区域 */}
                 <div className="flex items-center gap-4">
-                    {activeTab !== 'canvas' && (
+                    {isLoggedIn && (
+                        <button
+                            onClick={onNewProject}
+                            className="w-8 h-8 flex items-center justify-center border border-black bg-white text-black hover:bg-zinc-50 transition-all"
+                            title="新建项目"
+                        >
+                            <Plus size={16} />
+                        </button>
+                    )}
+                    {activeTab !== 'canvas' && activeTab !== 'my-projects' && (
                         <button onClick={loadStats} className="text-black/40 hover:text-black mt-1">
                             <RefreshCw size={18} />
                         </button>

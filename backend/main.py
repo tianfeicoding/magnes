@@ -43,12 +43,13 @@ from app.api.history_routes import router as history_router
 from app.api.task_routes import router as task_router
 from app.api.mcp_routes import router as mcp_router
 from app.api.prompt_routes import router as prompt_router
-from app.api.dialogue_routes import router as dialogue_router  # [Phase 1] 对话模式
-from app.api.rag_routes import router as rag_router, public_router as public_rag_router # [Phase 2] RAG 知识库
+from app.api.dialogue_routes import router as dialogue_router  # 自然语言对话模式
+from app.api.rag_routes import router as rag_router, public_router as public_rag_router # 品牌知识库
 from app.api.export_routes import router as export_router      # 图片导出
 from app.api.auth import router as auth_router                # FastAPI-Users 认证路由
 from app.api.auth_routes import router as config_router        # 配置管理路由
 from app.api.painter_routes import router as painter_router    # AI 绘图
+from app.api.project_routes import router as project_router    # 项目持久化
 from app.memory.routes import router as memory_router          # 记忆系统
 from app.core.users import fastapi_users, auth_backend, current_user  # FastAPI-Users
 from app.middleware.auth import AuthMiddleware                  # 认证中间件
@@ -279,13 +280,14 @@ app.include_router(history_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(task_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(mcp_router, prefix="/api/v1", dependencies=common_deps)
 app.include_router(prompt_router, prefix="/api/v1", dependencies=common_deps)
-app.include_router(dialogue_router, prefix="/api/v1", dependencies=common_deps)  # [Phase 1] 对话模式 SSE (已添加认证)
-app.include_router(public_rag_router, prefix="/api/v1")                         # [Phase 2] RAG 公共接口 (图片等)
-app.include_router(rag_router, prefix="/api/v1")                               # [Phase 2] RAG 业务接口 (内部已使用 current_user)
+app.include_router(dialogue_router, prefix="/api/v1", dependencies=common_deps)  # 自然语言对话模式 SSE (已添加认证)
+app.include_router(public_rag_router, prefix="/api/v1")                         # 品牌知识库公共接口 (图片等)
+app.include_router(rag_router, prefix="/api/v1")                               # 品牌知识库业务接口 (内部已使用 current_user)
 app.include_router(export_router, prefix="/api/v1", dependencies=common_deps)    # 图片导出
 app.include_router(auth_router, prefix="/api/v1")                               # FastAPI-Users 认证路由 (自带鉴权)
 app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # 配置管理路由
 app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # AI 绘图
+app.include_router(project_router, prefix="/api/v1", dependencies=common_deps)  # 项目持久化
 app.include_router(memory_router, prefix="/api/v1", dependencies=common_deps)   # 记忆系统
 
 # --- 挂载静态文件 (Frontend) ---

@@ -38,7 +38,23 @@
 | `AppModals.js: saveSoulMd` | `/api/v1/memory/soul` | POST | 保存/更新 Soul.md |
 | `AppModals.js: loadMemoryMd` | `/api/v1/memory/memory` | GET | 获取 MEMORY.md（记忆索引） |
 | `AppModals.js: saveMemoryMd` | `/api/v1/memory/memory` | POST | 保存/更新 MEMORY.md |
+| `memory-routes: getPreferences` | `/api/v1/memory/preferences` | GET | 获取策展式记忆列表 |
+| `memory-routes: createPreference` | `/api/v1/memory/preferences` | POST | 创建/更新单条记忆 |
+| `memory-routes: updatePreference` | `/api/v1/memory/preferences/{id}` | PATCH | 更新记忆内容或置信度 |
+| `memory-routes: deletePreference` | `/api/v1/memory/preferences/{id}` | DELETE | 删除单条记忆 |
 | `memory-routes: getSummary` | `/api/v1/memory/summary` | GET | 获取 prompt-ready 记忆摘要 |
+| `api-client.js: API.Project.list` | `/api/v1/projects/` | GET | 获取项目列表 |
+| `api-client.js: API.Project.get` | `/api/v1/projects/{id}` | GET | 获取单个项目详情 |
+| `api-client.js: API.Project.getLastActive` | `/api/v1/projects/last/active` | GET | 获取用户最近活跃项目 |
+| `api-client.js: API.Project.create` | `/api/v1/projects/` | POST | 创建新项目 |
+| `api-client.js: API.Project.update` | `/api/v1/projects/{id}` | PUT | 更新项目（自动保存） |
+| `api-client.js: API.Project.delete` | `/api/v1/projects/{id}` | DELETE | 删除项目（软删除） |
+| `api-client.js: API.Project.createSnapshot` | `/api/v1/projects/{id}/snapshots` | POST | 创建项目快照 |
+| `api-client.js: API.Project.listSnapshots` | `/api/v1/projects/{id}/snapshots` | GET | 获取项目快照列表 |
+| `api-client.js: API.ActionLog.log` | `/api/v1/projects/action-log` | POST | 记录画布操作日志 |
+| `api-client.js: API.ActionLog.history` | `/api/v1/projects/action-log/history` | GET | 查询操作日志历史 |
+| `api-client.js: API.Memory.analyze` | `/api/v1/projects/analyze-memory` | POST | 触发记忆回流分析 |
+| `api-client.js: API.Memory.preview` | `/api/v1/projects/memory-analysis/preview` | GET | 预览记忆分析结果 |
 
 ---
 
@@ -610,6 +626,55 @@ updateLayerData(bgLayerIdx, { url: result.url });
 ```
 - **响应**：`{ "status": "success", "data": { ... } }`
 
+**获取策展式记忆列表**
+
+- **触发时机**：记忆管理面板加载时。
+- **接口**：`GET /api/v1/memory/preferences?memory_type=preference`
+- **响应**：
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "uuid",
+      "memoryType": "preference",
+      "key": "主色调偏好",
+      "content": { "value": "粉色系" },
+      "confidence": 0.85,
+      "evidence": "最近5个项目使用粉色背景",
+      "updatedAt": "2026-04-19T10:30:00Z"
+    }
+  ]
+}
+```
+
+**创建/更新记忆**
+
+- **触发时机**：用户手动添加记忆，或记忆回流自动写入。
+- **接口**：`POST /api/v1/memory/preferences`
+- **请求体**：
+```json
+{
+  "memory_type": "preference",
+  "key": "主色调偏好",
+  "content": { "value": "粉色系" },
+  "confidence": 0.85,
+  "evidence": "最近5个项目使用粉色背景"
+}
+```
+- **行为**：同类型同 key 已存在时自动更新（upsert）。
+
+**更新记忆**
+
+- **触发时机**：用户修改某条记忆的内容或置信度。
+- **接口**：`PATCH /api/v1/memory/preferences/{memory_id}`
+- **请求体**：`{ "content": { "value": "暖色调" }, "confidence": 0.9 }`
+
+**删除记忆**
+
+- **触发时机**：用户删除某条记忆。
+- **接口**：`DELETE /api/v1/memory/preferences/{memory_id}`
+
 **前端处理**：
 ```js
 // 设置面板打开时并行加载
@@ -625,6 +690,150 @@ await API.magnesFetch('/memory/soul', {
     body: JSON.stringify({ text: soulMdValue })
 });
 ```
+
+### 3.15 项目持久化（Project）
+
+**获取项目列表**
+
+- **触发时机**：用户打开「我的项目」面板时。
+- **接口**：`GET /api/v1/projects/`
+- **响应**：
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "proj_xxx",
+      "name": "活动海报",
+      "description": "",
+      "thumbnailUrl": "/storage/generated_xxx.png",
+      "updatedAt": "2026-04-19T10:30:00Z",
+      "nodeCount": 5,
+      "edgeCount": 4
+    }
+  ]
+}
+```
+
+**获取最近活跃项目**
+
+- **触发时机**：应用 mount 时自动加载，恢复上次编辑状态。
+- **接口**：`GET /api/v1/projects/last/active`
+- **响应**：单个 Project 对象（含完整 `nodes`、`edges`、`viewport`）
+
+**创建项目**
+
+- **触发时机**：用户点击「新建项目」按钮。
+- **接口**：`POST /api/v1/projects/`
+- **请求体**：
+```json
+{
+  "name": "未命名项目",
+  "nodes": [],
+  "edges": [],
+  "viewport": {"x": 0, "y": 0, "zoom": 1}
+}
+```
+- **响应**：`{ "status": "success", "data": { "id": "proj_xxx", ... } }`
+
+**更新项目（自动保存）**
+
+- **触发时机**：画布 `nodes`/`edges`/`viewport` 变化后 2 秒防抖自动保存。
+- **接口**：`PUT /api/v1/projects/{id}`
+- **请求体**：
+```json
+{
+  "name": "活动海报",
+  "nodes": [...],
+  "edges": [...],
+  "viewport": {"x": 0, "y": 0, "zoom": 0.8}
+}
+```
+
+**删除项目**
+
+- **触发时机**：用户在项目卡片上点击删除。
+- **接口**：`DELETE /api/v1/projects/{id}`
+- **行为**：软删除（`is_deleted="1"`），同时记录 `CanvasActionLog`。
+
+**创建快照**
+
+- **触发时机**：用户手动保存里程碑版本（预留功能）。
+- **接口**：`POST /api/v1/projects/{id}/snapshots`
+- **请求体**：`{ "name": "v1.0 初稿", "note": "确定主色调前" }`
+
+---
+
+### 3.16 画布操作日志（CanvasActionLog）
+
+**记录操作日志**
+
+- **触发时机**：节点创建/删除、连线、导出图片、替换背景、项目保存/删除等关键操作后。
+- **接口**：`POST /api/v1/projects/action-log`
+- **请求体**：
+```json
+{
+  "actionType": "node_create",
+  "targetNodeId": "fine-tune-xxx",
+  "payload": {
+    "nodeTypes": ["rednote-content", "image-text-template", "fine-tune"],
+    "source": "conversation",
+    "activityCount": 3
+  },
+  "description": "用户通过对话创建了工作流：rednote-content → image-text-template → fine-tune"
+}
+```
+
+**查询日志历史**
+
+- **触发时机**：记忆回流分析前获取用户近期操作记录。
+- **接口**：`GET /api/v1/projects/action-log/history?limit=50`
+- **响应**：
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "log_xxx",
+      "actionType": "asset_replace",
+      "description": "用户在「活动海报」中通过 AI 生成了红色背景",
+      "payload": {"projectId": "proj_xxx", "source": "ai_generate"},
+      "createdAt": "2026-04-19T10:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 3.17 记忆回流（Memory Reflux）
+
+**触发记忆分析**
+
+- **触发时机**：用户每操作 5 分钟后自动触发，或用户主动点击「分析我的偏好」。
+- **接口**：`POST /api/v1/projects/analyze-memory`
+- **请求体**：`{ "userId": "user_xxx" }`
+- **响应**：
+```json
+{
+  "status": "success",
+  "data": {
+    "analysis": "该用户最近5个项目都使用粉色/暖色调背景，偏好3图并排布局...",
+    "memoriesCreated": 3,
+    "memories": [
+      {"type": "preference", "key": "主色调偏好", "value": "粉色系"},
+      {"type": "style", "key": "布局偏好", "value": "3图并排"},
+      {"type": "rejection", "key": "颜色排斥", "value": "蓝色背景"}
+    ]
+  }
+}
+```
+
+**预览记忆分析**
+
+- **触发时机**：用户点击「预览分析结果」，不实际写入 `user_memories`。
+- **接口**：`GET /api/v1/projects/memory-analysis/preview`
+- **响应**：与 `analyze-memory` 结构相同，但 `memoriesCreated` 为 0。
 
 ---
 

@@ -383,13 +383,28 @@ Planner Agent 支持通过对话触发以下画布操作：
 - **批量导出**：
   - 支持导出当前页为 PNG
   - 支持批量导出所有页面
-  - 使用 Playwright 服务端截图
+  - 使用 `html-to-image` 前端导出（已替换 html2canvas，解决文字偏移问题）
+  - 导出分辨率：标准 1080×1440，高清 2160×2880
+- **背景替换**：
+  - 本地上传：支持从本地选择图片作为背景
+  - AI 生成背景：输入提示词调用 `/painter/generate/background` 生成背景
+  - 素材库选取：通过侧边栏素材库选择已有图片替换背景
+  - 参考模式：支持 `txt2img` 和 `img2img`（基于当前背景图生成）
+- **侧边栏素材集成**：
+  - 点击背景替换按钮打开右侧素材库侧边栏
+  - 支持从素材库拖拽/点击选择图片应用到背景层
+  - 选中后自动切回画布 Tab
+- **分页支持**：
+  - 支持多页内容切换（`currentPage`）
+  - 每页独立覆写样式（`pageOverrides`）
+  - 图片层和文字层的分页数据路由（`pageOffset * itemsPerPage`）
 
 **数据流**：
 1. 上游节点输入布局数据（layers）
 2. 精细编排节点解析并渲染到画布
-3. 用户编辑后标记 `isDirty: true`
+3. 用户编辑（拖拽、缩放、样式修改、背景替换）后标记 `isDirty: true`
 4. 编辑后的布局数据传递给下游节点
+5. 导出时克隆画布 DOM，使用 `html-to-image` 生成 PNG
 
 ### 4.22 AI 绘图独立接口（FR-24）
 
@@ -420,13 +435,13 @@ Planner Agent 支持通过对话触发以下画布操作：
 
 #### 4.23.1 记忆分层架构
 
-Phase 1 采用**手动录入 + 自动注入**机制，分为三层：
+采用**手动录入 + 自动注入**机制，分为三层：
 
 | 层级 | 对应实现 | 内容形式 | 注入优先级 | 前端入口 |
 |------|----------|----------|------------|----------|
 | **长期偏好** | Soul.md (`memory_type="soul"`) | 自然语言人设卡 | 最高 | 设置 → 偏好设置 |
 | **中期记忆** | MEMORY.md (`memory_type="memory"`) | Markdown 事实清单 | 次高 | 设置 → 记忆设置 |
-| **结构化记忆** | UserMemory 表 (preference/rejection/...) | JSON 键值对 | 按需 | 后端保留，Phase 2 开放 |
+| **结构化记忆** | UserMemory 表 (preference/rejection/...) | JSON 键值对 | 按需 | 后端保留，按需开放 |
 
 #### 4.23.2 Soul.md — 偏好设定（FR-MEM-01 / FR-MEM-02）
 
@@ -472,12 +487,101 @@ Phase 1 采用**手动录入 + 自动注入**机制，分为三层：
 - 所有 Tab 内字号不超过 `12px`，`textarea` 默认 `rows=12`。
 - 不需要在 Header 新增 Icon，继续使用现有齿轮 `Settings` Icon。
 
-#### 4.23.7 Phase 1 明确不做
+### 4.24 项目持久化（FR-25）
 
-- 不自动从对话历史中总结偏好（手动录入）。
-- 不对长对话做主动压缩（保留现有 Summarizer 机制）。
-- 不记录具体画布操作（如"上次把背景替换成了哪张图"）。
-- 不做 RAG 式主动检索记忆。
+支持 ReactFlow 画布状态的完整保存与恢复，实现跨会话、跨设备的编辑连续性。
+
+**功能需求**：
+- **项目数据模型**：`Project`（id, user_id, name, nodes, edges, viewport, settings, conversation_id, created_at, updated_at）
+- **自动保存**：前端 `nodes`/`edges` 变化后 2 秒 debounce 自动保存到后端
+- **刷新恢复**：页面刷新后自动加载用户最后活跃项目（`GET /projects/last/active`）
+- **新建项目**：点击 Header `+` 图标清空画布，创建未命名项目
+- **项目列表**："我的项目" Tab 展示所有项目卡片（缩略图、名称、节点数、更新时间）
+- **项目管理**：支持重命名、删除（软删除）、切换项目
+- **项目快照**：支持创建命名快照（里程碑/版本），用于回溯重要节点
+
+**后端 API**：
+- `GET /api/v1/projects` — 获取项目列表（精简版，不含 nodes/edges）
+- `GET /api/v1/projects/last/active` — 获取最后活跃项目
+- `GET /api/v1/projects/{id}` — 获取项目完整数据
+- `POST /api/v1/projects` — 创建新项目
+- `PUT /api/v1/projects/{id}` — 更新项目（自动保存）
+- `DELETE /api/v1/projects/{id}` — 软删除项目
+- `POST /api/v1/projects/{id}/snapshots` — 创建快照
+- `GET /api/v1/projects/{id}/snapshots` — 获取快照列表
+
+**前端交互**：
+- Header Tab 新增"我的项目"，位于"AI生图库"之后
+- 项目名称以纯文本展示在 Magnes Logo 旁
+- 新建项目按钮为 `Plus` 图标按钮（右上角）
+- 项目卡片网格布局（2/3/4/5 列响应式），与 AI 生图库风格一致
+
+### 4.25 画布操作日志（FR-26）
+
+记录用户在画布上的细粒度操作，用于语义检索、审计追踪和崩溃恢复。
+
+**记录的操作类型**：
+
+| 操作类型 | actionType | 触发场景 | 记录内容 |
+|---|---|---|---|
+| 对话创建工作流 | `node_create` | 对话助手生成三段式节点 | 节点类型、活动数量、模版ID、来源 |
+| 拖拽添加节点 | `node_create` | 从组件库拖拽节点到画布 | 节点类型、位置、来源 |
+| 删除节点 | `node_delete` | 按 Delete 或点击删除按钮 | 删除数量、节点类型列表 |
+| 连接节点 | `edge_connect` | 手动拖拽连接两个节点 | source、target、handle |
+| 导出图片 | `image_export` | 精细编排节点导出当前页 | 页码、总页数、图层数量 |
+| 替换背景（本地上传） | `asset_replace` | 上传本地图片作为背景 | 图层类型、来源 |
+| 替换背景（AI生成） | `asset_replace` | 通过 AI 生成背景图 | 图层类型、提示词、参考模式 |
+| 项目保存 | `canvas_save` | 自动保存或手动保存项目 | 节点数、边数、项目名 |
+| 项目创建 | `project_create` | 新建项目 | 节点数、边数、项目名 |
+| 项目删除 | `project_delete` | 删除项目 | 项目名 |
+| 项目重命名 | `project_rename` | 修改项目名称 | 新名称 |
+
+**后端 API**：
+- `POST /api/v1/projects/action-log` — 接收前端发送的操作日志
+- `GET /api/v1/projects/action-log/history` — 查询操作日志历史（支持按类型过滤）
+
+**实现说明**：
+- 日志记录失败不影响主流程（try-catch 包裹）
+- 项目保存（create/update/delete）时自动写入 CanvasActionLog
+- 前端关键操作（节点创建、删除、连线、导出、背景替换）主动发送日志
+
+### 4.26 记忆回流（FR-27）
+
+定期分析用户的画布操作日志，自动提取偏好并写入长期记忆（UserMemory），让 AI 越用越懂用户。
+
+**工作流程**：
+```
+用户操作画布 → CanvasActionLog 记录 → 定期 LLM 分析
+                                              ↓
+                                    提取偏好 → UserMemory
+                                              ↓
+                                    注入 Planner Agent system prompt
+                                              ↓
+                                    下次生成自动推荐用户偏好的风格/色调/布局
+```
+
+**后端 API**：
+- `POST /api/v1/projects/analyze-memory` — 分析操作日志，提取偏好写入 UserMemory
+- `GET /api/v1/projects/memory-analysis/preview` — 预览分析结果（不写入数据库）
+
+**自动触发**：
+- 项目自动保存成功后，每隔 5 分钟异步触发一次记忆分析
+- 分析过程不阻塞用户操作，延迟 3 秒在后台执行
+
+**可提取的偏好场景**：
+
+| 场景 | memory_type | 示例 | 数据来源 |
+|---|---|---|---|
+| **主色调偏好** | `preference` | 用户连续5个项目都用粉色/暖色调背景 | `asset_replace`、`node_create` |
+| **布局风格偏好** | `style` | 偏好3图并排、单图大标题、上下分割等 | `node_create`、Project.nodes结构 |
+| **颜色排斥** | `rejection` | 从未使用蓝色背景，或每次都删除蓝色相关节点 | `node_delete`、`asset_replace` |
+| **字体/排版偏好** | `style` | 常用粗体标题、特定字号层级、居中对齐 | 节点数据中的textStyle、fontSize |
+| **工作流模式** | `workflow` | 习惯"对话→模版→精细编排"三段式，或手动拖拽组件 | `node_create`（source=conversation/drag_drop） |
+| **素材来源偏好** | `preference` | 倾向本地上传 vs AI生成 vs 素材库选取 | `asset_replace`（source=local_upload/ai_generate） |
+| **导出习惯** | `custom` | 总是导出多页、偏好特定分辨率 | `image_export` |
+| **节点组合习惯** | `workflow` | 常把input-image → gen-image → fine-tune连起来 | `edge_connect`、`node_create` |
+| **内容主题偏好** | `preference` | 经常做美食/旅行/活动海报 | `node_create`（rednote-content的活动内容） |
+| **AI生成提示词风格** | `style` | 常用"春日""清新""简约"等关键词 | `asset_replace`（prompt字段） |
 
 ## 5. 非功能需求细化
 
@@ -563,6 +667,9 @@ Phase 1 采用**手动录入 + 自动注入**机制，分为三层：
 | FR-MEM-02 | `frontend/src/components/layout/AppModals.js` | Soul.md 编辑与保存测试 |
 | FR-MEM-03 | `frontend/src/components/layout/AppModals.js` | MEMORY.md 编辑与保存测试 |
 | FR-MEM-04 | `backend/app/memory/routes.py` | 结构化记忆 CRUD API 测试 |
+| FR-25 | `backend/app/api/project_routes.py` + `frontend/src/app.js` | 项目持久化：创建/保存/切换/删除/快照 |
+| FR-26 | `backend/app/api/project_routes.py` + `frontend/src/hooks/` | CanvasActionLog 操作日志记录与查询 |
+| FR-27 | `backend/app/api/project_routes.py` + `backend/app/memory/models.py` | 记忆回流：LLM 分析日志 → 提取偏好 → UserMemory |
 | FR-03-EXT | `backend/app/agents/planner/nodes/planner_agent.py` | Fast Path 与意图识别测试 |
 | NFR-01 | FastAPI + Uvicorn 配置 | 性能压测 |
 | NFR-03 | `GET /` 根路径健康检查 | 功能测试 |

@@ -1,6 +1,6 @@
 /**
  * ConversationPanel - Manus 风格对话面板
- * Phase 1: 对话驱动设计操作
+ * 对话驱动设计操作
  * 
  * 功能：
  * - 自然语言对话触发画布操作
@@ -700,24 +700,25 @@
                 }]);
 
                 try {
-                    // 动态加载 html2canvas（若未已加载）
-                    if (!window.html2canvas) {
+                    // 动态加载 html-to-image（若未已加载）
+                    if (!window.htmlToImage) {
                         await new Promise((resolve, reject) => {
                             const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                            s.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
                             s.onload = resolve; s.onerror = reject;
                             document.head.appendChild(s);
                         });
                     }
 
                     // 克隆 DOM 并将图片内联为 base64，避免 CORS/缓存问题影响原始页面
+                    const wrapper = document.createElement('div');
+                    wrapper.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointerEvents:none;zIndex:-9999;overflow:hidden;';
                     const clone = canvasEl.cloneNode(true);
-                    clone.style.position = 'fixed';
-                    clone.style.left = '-9999px';
-                    clone.style.top = '-9999px';
+                    clone.style.position = 'static';
                     clone.style.width = canvasEl.offsetWidth + 'px';
                     clone.style.height = canvasEl.offsetHeight + 'px';
-                    document.body.appendChild(clone);
+                    wrapper.appendChild(clone);
+                    document.body.appendChild(wrapper);
 
                     const originalImgs = Array.from(canvasEl.querySelectorAll('img'));
                     const clonedImgs = Array.from(clone.querySelectorAll('img'));
@@ -739,14 +740,12 @@
                         }
                     }
 
-                    const canvas = await window.html2canvas(clone, {
-                        useCORS: true,
-                        scale: 2,
-                        backgroundColor: '#ffffff'
+                    const dataUrl = await window.htmlToImage.toPng(clone, {
+                        pixelRatio: 2,
+                        backgroundColor: '#ffffff',
+                        skipFonts: false
                     });
-                    if (clone.parentNode) clone.parentNode.removeChild(clone);
-
-                    const dataUrl = canvas.toDataURL('image/png');
+                    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
 
                     // 将截图以图片消息形式更新到对话框
                     setMessages(prev => prev.map(m => m.id === exportMsgId ? {
@@ -1101,7 +1100,7 @@
                     buffer = processBuffer(buffer);
                 }
 
-                // [Crucial Fix] 处理最后可能残留在 buffer 中的信号（例如 done 信号处于流的末尾）
+                // 处理最后可能残留在 buffer 中的信号（例如 done 信号处于流的末尾）
                 if (buffer.trim()) {
                     processBuffer(buffer + '\n');
                 }
@@ -1114,7 +1113,7 @@
                         : m
                 ));
             } finally {
-                // [Robust Fix] 兜底解锁机制：无论上面发生了什么，强制标识生成结束，解开输入框锁
+                // [Robust  兜底解锁机制：无论上面发生了什么，强制标识生成结束，解开输入框锁
                 console.log('[ConversationPanel] 🛡️ SSE Finally Lock Release Triggered');
                 setIsGenerating(false);
                 setMessages(prev => prev.map(m =>

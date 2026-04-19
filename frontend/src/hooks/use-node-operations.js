@@ -20,9 +20,30 @@
     }) => {
         // 1. 删除选中元素
         const deleteSelectedElements = useCallback(() => {
+            const selectedNodes = nodes.filter(n => n.selected);
+            const selectedEdges = edges.filter(e => e.selected);
             setNodes(nds => nds.filter(n => !n.selected));
             setEdges(eds => eds.filter(e => !e.selected));
-        }, [setNodes, setEdges]);
+
+            // 记录 CanvasActionLog
+            try {
+                const API = window.MagnesComponents?.Utils?.API;
+                if (API?.ActionLog?.log && selectedNodes.length > 0) {
+                    API.ActionLog.log({
+                        actionType: 'node_delete',
+                        targetNodeId: selectedNodes[0]?.id,
+                        payload: {
+                            deletedNodeCount: selectedNodes.length,
+                            deletedEdgeCount: selectedEdges.length,
+                            deletedNodeTypes: selectedNodes.map(n => n.type),
+                        },
+                        description: `用户删除了 ${selectedNodes.length} 个节点`,
+                    });
+                }
+            } catch (e) {
+                console.error('[Magnes] CanvasActionLog 发送失败:', e);
+            }
+        }, [nodes, edges, setNodes, setEdges]);
 
         // 2. 复制选中节点
         const duplicateSelectedNodes = useCallback(() => {
@@ -57,10 +78,32 @@
         }, [nodes, setNodes]);
 
         // 5. 连线处理
-        const onConnect = useCallback((params) => setEdges((eds) => addEdge({
-            type: 'button-edge',
-            ...params
-        }, eds)), [setEdges, addEdge]);
+        const onConnect = useCallback((params) => {
+            setEdges((eds) => addEdge({
+                type: 'button-edge',
+                ...params
+            }, eds));
+
+            // 记录 CanvasActionLog
+            try {
+                const API = window.MagnesComponents?.Utils?.API;
+                if (API?.ActionLog?.log) {
+                    API.ActionLog.log({
+                        actionType: 'edge_connect',
+                        targetNodeId: params.target,
+                        payload: {
+                            source: params.source,
+                            target: params.target,
+                            sourceHandle: params.sourceHandle,
+                            targetHandle: params.targetHandle,
+                        },
+                        description: `用户连接了节点：${params.source} → ${params.target}`,
+                    });
+                }
+            } catch (e) {
+                console.error('[Magnes] CanvasActionLog 发送失败:', e);
+            }
+        }, [setEdges, addEdge]);
 
         // 6. 拖拽放置处理
         const onDragOver = useCallback((event) => {
@@ -74,13 +117,33 @@
             if (!type || !reactFlowInstance) return;
 
             const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+            const newNodeId = `${type}-${Date.now()}`;
             const newNode = {
-                id: `${type}-${Date.now()}`,
+                id: newNodeId,
                 type: type,
                 position,
                 data: { label: type },
             };
             setNodes((nds) => nds.concat(newNode));
+
+            // 记录 CanvasActionLog
+            try {
+                const API = window.MagnesComponents?.Utils?.API;
+                if (API?.ActionLog?.log) {
+                    API.ActionLog.log({
+                        actionType: 'node_create',
+                        targetNodeId: newNodeId,
+                        payload: {
+                            nodeType: type,
+                            position,
+                            source: 'drag_drop',
+                        },
+                        description: `用户从组件库拖拽添加了「${type}」节点`,
+                    });
+                }
+            } catch (e) {
+                console.error('[Magnes] CanvasActionLog 发送失败:', e);
+            }
         }, [reactFlowInstance, setNodes]);
 
         // 7. 注册全局快捷键与公共接口

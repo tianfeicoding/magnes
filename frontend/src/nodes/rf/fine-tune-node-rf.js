@@ -26,15 +26,54 @@
             return url;
         };
 
-        // 辅助函数：克隆画布并将图片内联为 base64，避免 html2canvas 的 CORS/缓存问题影响原始 DOM
+        // 辅助函数：克隆画布并将图片内联为 base64，避免 html-to-image 的 CORS/缓存问题影响原始 DOM
         const cloneCanvasForExport = (canvasElement) => {
+            const wrapper = document.createElement('div');
+            // 把隐藏样式放在 wrapper 上，避免 html-to-image 序列化时把 off-screen 样式带入 SVG
+            wrapper.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointerEvents:none;zIndex:-9999;overflow:hidden;';
+
             const clone = canvasElement.cloneNode(true);
-            clone.style.position = 'fixed';
-            clone.style.left = '-9999px';
-            clone.style.top = '-9999px';
+            clone.style.position = 'static';
             clone.style.width = canvasElement.offsetWidth + 'px';
             clone.style.height = canvasElement.offsetHeight + 'px';
-            document.body.appendChild(clone);
+            wrapper.appendChild(clone);
+            document.body.appendChild(wrapper);
+
+            // [Purification] 移除克隆节点中的选中样式和辅助 UI
+            // 1. 移除选中边框 (boxShadow)
+            const layerElements = clone.querySelectorAll('[style*="box-shadow"]');
+            layerElements.forEach(el => {
+                if (el.style.boxShadow.includes('0 0 0 1px')) {
+                    el.style.boxShadow = 'none';
+                }
+            });
+
+            // 2. 移除所有的 ResizeHandles (那些 8x8 的白色小块)
+            const handles = clone.querySelectorAll('div[style*="width: 8px"][style*="height: 8px"]');
+            handles.forEach(h => h.remove());
+
+            // 3. 移除”复制/删除”按钮容器
+            const actionButtons = clone.querySelectorAll('div[style*="z-index: 2005"]');
+            actionButtons.forEach(b => b.remove());
+
+            // 4. 移除辅助线 SVG
+            const svgOverlay = clone.querySelector('svg.pointer-events-none.z-\\[2000\\]');
+            if (svgOverlay) svgOverlay.remove();
+
+            // 5. [Alignment Fix] 深度清除文字图层的 padding 和边框位移，强制像素级同步
+            const textLayers = clone.querySelectorAll('.text-black');
+            textLayers.forEach(el => {
+                el.style.padding = '0';
+                el.style.margin = '0';
+                el.style.border = 'none';
+                el.style.boxSizing = 'content-box';
+                el.style.display = 'block';
+                el.style.verticalAlign = 'top';
+                // 确保行高在导出环境中维持一致，防止部分浏览器默认行为差异
+                el.style.lineHeight = '1.4';
+                el.style.whiteSpace = 'pre-wrap';
+                el.style.wordBreak = 'break-word';
+            });
 
             const originalImgs = Array.from(canvasElement.querySelectorAll('img'));
             const clonedImgs = Array.from(clone.querySelectorAll('img'));
@@ -48,16 +87,16 @@
                         c.width = origImg.naturalWidth;
                         c.height = origImg.naturalHeight;
                         c.getContext('2d').drawImage(origImg, 0, 0);
-                        clonedImg.src = c.toDataURL('image/png');
+                        clonedImg.src = c.toDataURL('image/png', 1.0); // 使用最大质量
                         clonedImg.crossOrigin = 'anonymous';
                     }
                 } catch (err) {
                     console.warn('[FineTune] Could not inline image for export:', err);
-                    // 回退：保持原始 resolved URL，让 html2canvas 自己尝试
+                    // 回退：保持原始 resolved URL，让 html-to-image 自己尝试
                     clonedImg.crossOrigin = 'anonymous';
                 }
             }
-            return clone;
+            return { clone, wrapper };
         };
 
         if (!BaseNode) {
@@ -397,11 +436,11 @@
 
             setIsExporting(true);
             try {
-                // 确保 html2canvas 已加载
-                if (!window.html2canvas) {
+                // 确保 html-to-image 已加载
+                if (!window.htmlToImage) {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
-                        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                        script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
                         script.onload = resolve;
                         script.onerror = reject;
                         document.head.appendChild(script);
@@ -419,22 +458,22 @@
                     const canvasElement = document.querySelector(`.fine-tune-canvas-${id}`);
                     if (!canvasElement) continue;
 
-                    const clone = cloneCanvasForExport(canvasElement);
+                    const { clone, wrapper } = cloneCanvasForExport(canvasElement);
                     try {
-                        const canvas = await window.html2canvas(clone, {
-                            useCORS: true,
-                            scale: 2,
-                            backgroundColor: '#ffffff'
+                        const dataUrl = await window.htmlToImage.toPng(clone, {
+                            pixelRatio: 3,
+                            backgroundColor: '#ffffff',
+                            skipFonts: false
                         });
 
                         const link = document.createElement('a');
                         link.download = `Magnes_Batch_P${i + 1}_${Date.now()}.png`;
-                        link.href = canvas.toDataURL('image/png');
+                        link.href = dataUrl;
                         link.click();
 
                         console.log(`[FineTune] Exported page ${i + 1}/${totalPages}`);
                     } finally {
-                        if (clone.parentNode) clone.parentNode.removeChild(clone);
+                        if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
                     }
                 }
 
@@ -754,32 +793,51 @@
 
             setIsExporting(true);
             try {
-                // 如果没有 html2canvas，则尝试加载
-                if (!window.html2canvas) {
-                    console.log('[FineEdit] Loading html2canvas...');
+                // 如果没有 html-to-image，则尝试加载
+                if (!window.htmlToImage) {
+                    console.log('[FineEdit] Loading html-to-image...');
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
-                        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                        script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
                         script.onload = resolve;
                         script.onerror = reject;
                         document.head.appendChild(script);
                     });
                 }
 
-                const clone = cloneCanvasForExport(canvasElement);
+                const { clone, wrapper } = cloneCanvasForExport(canvasElement);
                 try {
-                    const canvas = await window.html2canvas(clone, {
-                        useCORS: true,
-                        scale: 2, // 导出 2 倍图保证清晰度
-                        backgroundColor: '#ffffff'
+                    const dataUrl = await window.htmlToImage.toPng(clone, {
+                        pixelRatio: 3,
+                        backgroundColor: '#ffffff',
+                        skipFonts: false
                     });
 
                     const link = document.createElement('a');
                     link.download = `Magnes_Page_${currentPage + 1}_${Date.now()}.png`;
-                    link.href = canvas.toDataURL('image/png');
+                    link.href = dataUrl;
                     link.click();
+
+                    // 记录 CanvasActionLog
+                    try {
+                        const API = window.MagnesComponents?.Utils?.API;
+                        if (API?.ActionLog?.log) {
+                            API.ActionLog.log({
+                                actionType: 'image_export',
+                                targetNodeId: id,
+                                payload: {
+                                    page: currentPage + 1,
+                                    totalPages: totalPages,
+                                    layerCount: layers?.length || 0,
+                                },
+                                description: `用户导出了精细编排第 ${currentPage + 1} 页图片`,
+                            });
+                        }
+                    } catch (e) {
+                        console.error('[Magnes] CanvasActionLog 发送失败:', e);
+                    }
                 } finally {
-                    if (clone.parentNode) clone.parentNode.removeChild(clone);
+                    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
                 }
             } catch (err) {
                 console.error('[FineEdit] Export failed:', err);
@@ -924,6 +982,24 @@
                         ...n, data: { ...n.data, isDirty: true, content: { ...schema, layers: newLayers } }
                     } : n));
                 }
+
+                // 记录 CanvasActionLog
+                try {
+                    const API = window.MagnesComponents?.Utils?.API;
+                    if (API?.ActionLog?.log) {
+                        API.ActionLog.log({
+                            actionType: 'asset_replace',
+                            targetNodeId: id,
+                            payload: {
+                                layerType: 'background',
+                                source: 'local_upload',
+                            },
+                            description: `用户在精细编排节点中上传了本地背景图片`,
+                        });
+                    }
+                } catch (e) {
+                    console.error('[Magnes] CanvasActionLog 发送失败:', e);
+                }
             };
             reader.readAsDataURL(file);
         };
@@ -1001,6 +1077,26 @@
                         } : n));
                     }
                     setShowGenPanel(false);
+
+                    // 记录 CanvasActionLog
+                    try {
+                        const LogAPI = window.MagnesComponents?.Utils?.API;
+                        if (LogAPI?.ActionLog?.log) {
+                            LogAPI.ActionLog.log({
+                                actionType: 'asset_replace',
+                                targetNodeId: id,
+                                payload: {
+                                    layerType: 'background',
+                                    source: 'ai_generate',
+                                    prompt: genPrompt,
+                                    referenceMode: useReferenceImage ? 'img2img' : 'txt2img',
+                                },
+                                description: `用户通过 AI 生成了背景图片（提示词：${genPrompt.slice(0, 30)}...）`,
+                            });
+                        }
+                    } catch (e) {
+                        console.error('[Magnes] CanvasActionLog 发送失败:', e);
+                    }
                 }
             } catch (err) {
                 console.error('[FineTune] AI背景生成失败:', err);
@@ -1029,6 +1125,12 @@
                         {/* 1. WYSIWYG 画布区域 */}
                         {/* 动态宽高比适配：从 schema.canvas 获取比例，防止硬编码 3:4 导致变形 */}
                         <div
+                            onClick={(e) => {
+                                // 如果点击的是画布背景（而非由于冒泡传来的图层点击），取消选中
+                                if (e.target === e.currentTarget) {
+                                    setLayer(-1);
+                                }
+                            }}
                             className={`relative w-full bg-zinc-50 border border-black overflow-hidden group nodrag fine-tune-canvas-${id}`}
                             style={{
                                 aspectRatio: (schema.canvas?.width && schema.canvas?.height)
@@ -1084,7 +1186,9 @@
                                         cursor: isBackground ? 'default' : (dragState ? 'grabbing' : 'grab'),
                                         pointerEvents: isBackground ? 'none' : 'auto', // 防止全屏背景阻挡下层原本更高的 DOM 响应
                                         boxShadow: isActive && !isBackground ? 'inset 0 0 0 1px #000' : 'none',
-                                        padding: isText ? '2px' : '0',
+                                        padding: '0', // [Alignment Fix] 移除 2px 偏移源，确保编辑态与导出态基准线统一
+                                        margin: '0',
+                                        verticalAlign: 'top',
                                         display: ((layer.isHidden ?? false) || (layer.opacity ?? 1) === 0) ? 'none' : 'block'
                                     };
 

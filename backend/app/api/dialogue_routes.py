@@ -1,7 +1,7 @@
 """
 Dialogue Routes
 对话式 AI 助手的 API 端点，支持 SSE 实时流式输出。
-用于 Phase 1: Manus 对话模式
+用于自然语言对话模式
 
 核心端点：
 - POST /dialogue/run      → SSE 流式对话（Planner 意图解析 + 画布操作指令）

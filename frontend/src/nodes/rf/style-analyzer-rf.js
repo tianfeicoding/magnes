@@ -367,7 +367,7 @@
                     evaluation_mode: evaluationMode,
                     source_image: sourceImageUrl,
                     style_evolution: styleEvolution,
-                    is_user_edited: isEditingPrompt  // [NEW] 标记这是用户编辑后的优化
+                    is_user_edited: isEditingPrompt  // 标记这是用户编辑后的优化
                 },
                 apiConfigs
             });
@@ -603,8 +603,8 @@
                                             key: version.version,
                                             onClick: () => setSelectedVersion(version),
                                             className: `text-left p-2 border text-[10px] transition-colors ${isSelected
-                                                    ? 'bg-white border-black'
-                                                    : 'bg-zinc-50 text-black border-black/20 hover:border-black'
+                                                ? 'bg-white border-black'
+                                                : 'bg-zinc-50 text-black border-black/20 hover:border-black'
                                                 }`
                                         },
                                             React.createElement('div', { className: "flex items-center justify-between" },
@@ -683,8 +683,8 @@
                                         key: option.value,
                                         onClick: () => setEvaluationMode(option.value),
                                         className: `flex-1 flex flex-col items-center gap-1 p-2 border transition-colors ${evaluationMode === option.value
-                                                ? 'bg-black text-white border-black'
-                                                : 'bg-white text-black border-black hover:bg-zinc-100'
+                                            ? 'bg-black text-white border-black'
+                                            : 'bg-white text-black border-black hover:bg-zinc-100'
                                             }`
                                     },
                                         React.createElement('span', { className: "text-[12px]" }, option.icon),

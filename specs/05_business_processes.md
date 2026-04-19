@@ -242,10 +242,69 @@ flowchart TD
     L --> M[for page in 0..totalPages]
     M --> N[setPage(page)]
     N --> O[等待 800ms 渲染]
-    O --> P[html2canvas 截图]
+    O --> P[html-to-image 截图]
     P --> Q[触发浏览器下载]
     Q --> M
 ```
+
+### 3.4 项目自动保存与恢复流程
+
+```mermaid
+flowchart TD
+    subgraph 初始化
+        A[前端 app.js mount] --> B{localStorage 有 projectId?}
+        B -->|是| C[GET /api/v1/projects/{id}]
+        B -->|否| D[GET /api/v1/projects/last/active]
+        C --> E{项目存在?}
+        D --> E
+        E -->|是| F[setNodes / setEdges / setViewport]
+        E -->|否| G[创建空白画布]
+        F --> H[渲染 ReactFlow 画布]
+        G --> H
+    end
+
+    subgraph 自动保存
+        I[nodes/edges/viewport 变化] --> J[2秒防抖定时器]
+        J --> K{当前有项目?}
+        K -->|是| L[PUT /api/v1/projects/{id}]
+        K -->|否| M[POST /api/v1/projects/ 创建新项目]
+        M --> N[localStorage 记录 projectId]
+        L --> O[记录 CanvasActionLog]
+        M --> O
+        O --> P[返回项目摘要]
+    end
+
+    subgraph 多项目管理
+        Q[用户点击「我的项目」] --> R[GET /api/v1/projects/]
+        R --> S[展示项目卡片列表]
+        S --> T{用户操作?}
+        T -->|切换项目| U[setProjectId + 重新加载画布]
+        T -->|新建项目| V[清空画布 + POST 新项目]
+        T -->|删除项目| W[DELETE /api/v1/projects/{id}]
+        U --> X[自动跳转到画布 Tab]
+        V --> X
+    end
+
+    H --> I
+```
+
+**关键流程说明**：
+
+1. **刷新恢复**：
+   - 优先使用 `localStorage` 缓存的 `projectId`
+   - 若无缓存，调用 `GET /projects/last/active` 获取最近项目
+   - 恢复时完整加载 `nodes`、`edges`、`viewport`
+
+2. **自动保存策略**：
+   - 画布状态变化后触发 2 秒防抖
+   - 首次保存时若用户无项目，自动创建「未命名项目」
+   - 保存时同时记录 `CanvasActionLog`（`action_type=canvas_save`）
+   - 保存失败不影响用户继续编辑（静默失败）
+
+3. **多项目切换**：
+   - 切换项目后自动跳转至「画布」Tab
+   - 删除项目为软删除（`is_deleted="1"`）
+   - 项目卡片展示缩略图（从 nodes 中提取第一张图片 URL）
 
 ---
 

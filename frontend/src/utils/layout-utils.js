@@ -435,14 +435,16 @@
                         // A. 优先级 1: 显式组路由 (Group Route for Images) - 严格模式
                         if (l.groupId) {
                             const match = l.groupId.match(/group_(\d+)/);
-                            const gIdx = match ? parseInt(match[1]) - 1 : -1;
+                            const originalIdx = match ? parseInt(match[1]) - 1 : -1;
+                            // [Magnes Pagination] 应用页码偏移：group_1 在第 2 页应显示第 4 个(idx=3)项
+                            const gIdx = originalIdx + (pageOffset * itemsPerPage);
                             const targetItem = items[gIdx];
 
                             // 严格性：仅当该组确实有自己的上传图片时才填充
                             if (targetItem && targetItem.images && targetItem.images.length > 0) {
                                 // 虽然一个组可能有多个槽位，但目前通常 1 项配 1 图
                                 finalUrl = targetItem.images[0];
-                                console.log(`[LayoutUtils] Strict Group Image Match: ${l.groupId} -> items[${gIdx}].images[0]`);
+                                console.log(`[LayoutUtils] Strict Group Image Match: ${l.groupId} (Page=${pageOffset}, itemIdx=${gIdx}) -> items[${gIdx}].images[0]`);
                             } else {
                                 // [Magnes Patch] 如果该活动项没传图，严禁去全局借图（否则会出现克隆现象）
                                 finalUrl = null;

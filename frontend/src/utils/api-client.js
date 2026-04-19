@@ -187,5 +187,135 @@
         }
     };
 
+    // ── Project 持久化 API ──
+    API.Project = {
+        /**
+         * 获取项目列表
+         */
+        list: async () => {
+            const res = await API.magnesFetch('projects');
+            return res.json();
+        },
+
+        /**
+         * 获取单个项目
+         */
+        get: async (projectId) => {
+            const res = await API.magnesFetch(`projects/${projectId}`);
+            return res.json();
+        },
+
+        /**
+         * 获取最后活跃项目（用于刷新后自动恢复）
+         */
+        getLastActive: async () => {
+            const res = await API.magnesFetch('projects/last/active');
+            return res.json();
+        },
+
+        /**
+         * 创建新项目
+         */
+        create: async (data) => {
+            const res = await API.magnesFetch('projects', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+            return res.json();
+        },
+
+        /**
+         * 更新项目（自动保存）
+         */
+        update: async (projectId, data) => {
+            const res = await API.magnesFetch(`projects/${projectId}`, {
+                method: 'PUT',
+                body: JSON.stringify(data)
+            });
+            return res.json();
+        },
+
+        /**
+         * 删除项目
+         */
+        delete: async (projectId) => {
+            const res = await API.magnesFetch(`projects/${projectId}`, {
+                method: 'DELETE'
+            });
+            return res.json();
+        },
+
+        /**
+         * 创建快照
+         */
+        createSnapshot: async (projectId, data) => {
+            const res = await API.magnesFetch(`projects/${projectId}/snapshots`, {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+            return res.json();
+        },
+
+        /**
+         * 获取快照列表
+         */
+        listSnapshots: async (projectId) => {
+            const res = await API.magnesFetch(`projects/${projectId}/snapshots`);
+            return res.json();
+        }
+    };
+
+    // ── 细粒度操作日志 API ──
+    API.ActionLog = {
+        /**
+         * 发送一条画布操作日志
+         */
+        log: async ({ actionType, targetNodeId, payload, description, conversationId }) => {
+            const res = await API.magnesFetch('projects/action-log', {
+                method: 'POST',
+                body: JSON.stringify({
+                    actionType,
+                    targetNodeId,
+                    payload,
+                    description,
+                    conversationId
+                })
+            });
+            return res.json();
+        },
+
+        /**
+         * 获取操作日志历史
+         */
+        history: async (limit = 50, actionType) => {
+            let url = `projects/action-log/history?limit=${limit}`;
+            if (actionType) url += `&action_type=${encodeURIComponent(actionType)}`;
+            const res = await API.magnesFetch(url);
+            return res.json();
+        }
+    };
+
+    // ── 记忆回流 API ──
+    API.Memory = {
+        /**
+         * 触发记忆分析（分析操作日志 → 提取偏好 → 写入 UserMemory）
+         */
+        analyze: async (limit = 100) => {
+            const res = await API.magnesFetch('projects/analyze-memory', {
+                method: 'POST',
+                body: JSON.stringify({ limit })
+            });
+            return res.json();
+        },
+
+        /**
+         * 预览记忆分析结果（不写入数据库）
+         */
+        preview: async (limit = 50) => {
+            const res = await API.magnesFetch(`projects/memory-analysis/preview?limit=${limit}`);
+            return res.json();
+        }
+    };
+
     window.MagnesComponents.Utils.API = API;
 })();

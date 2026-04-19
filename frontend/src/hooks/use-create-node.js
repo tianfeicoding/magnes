@@ -464,6 +464,27 @@
                 }
                 console.log('[Magnes] ✅ Three-node workflow created. Layers:', mergedLayers.length);
 
+                // 记录 CanvasActionLog：通过对话创建工作流
+                try {
+                    const API = window.MagnesComponents?.Utils?.API;
+                    if (API?.ActionLog?.log) {
+                        API.ActionLog.log({
+                            actionType: 'node_create',
+                            targetNodeId: fineTuneNodeId,
+                            payload: {
+                                nodeTypes: ['rednote-content', 'image-text-template', 'fine-tune'],
+                                activityCount: activities?.length || 0,
+                                templateId: templateId,
+                                source: 'conversation'
+                            },
+                            description: `用户通过对话创建了工作流（内容输入 → 模版选择 → 精细编排），包含 ${activities?.length || 0} 个活动`,
+                            conversationId: conversationId
+                        });
+                    }
+                } catch (e) {
+                    console.error('[Magnes] CanvasActionLog 发送失败:', e);
+                }
+
             } catch (err) {
                 console.error('[Magnes] useCreateNode Error:', err);
                 if (toast) {
