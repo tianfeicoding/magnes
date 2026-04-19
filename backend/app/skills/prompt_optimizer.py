@@ -200,8 +200,10 @@ def build_optimizer_prompt(
     # 3. 模型感知注入
     model_hint = ""
     if current_model:
-        if "nano-banana" in current_model or "jimeng" in current_model:
+        if "nano-banana" in current_model:
             model_hint = "\n\n[当前目标模型]: Nano-Banana 系列 - 请使用叙述式英文 Prompt，避免复杂权重括号语法。"
+        elif "jimeng" in current_model:
+            model_hint = "\n\n[当前目标模型]: 即梦系列 - 请使用叙述式英文 Prompt，避免复杂权重括号语法。"
         elif "flux" in current_model.lower():
             model_hint = "\n\n[当前目标模型]: Flux 系列 - 可使用 (keyword:1.2) 权重增强语法。"
         else:

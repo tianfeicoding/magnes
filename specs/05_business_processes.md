@@ -546,7 +546,7 @@ flowchart TD
 
     subgraph Stage3["阶段三：生成与导出"]
         C1[用户确认生成] --> C2[调用 Painter Agent]
-        C2 --> C3[Nano-Banana/即梦 API 生图]
+        C2 --> C3[Nano-Banana / 即梦 API 生图]
         C3 --> C4{生成成功?}
         C4 -->|是| C5[返回生成结果]
         C4 -->|否| C6[3次重试后降级提示]
