@@ -118,7 +118,7 @@ API 服务层 (FastAPI + Uvicorn)
 
 - Python 3.10+
 - Node.js 18+（可选，仅用于修改前端 JSX 源码后重新编译）
-- 可访问 OpenAI 兼容 API（或即梦 AI SessionID）
+- 可访问 OpenAI 兼容 API
 
 ### 1. 克隆仓库
 

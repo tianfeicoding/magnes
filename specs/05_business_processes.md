@@ -546,7 +546,7 @@ flowchart TD
 
     subgraph Stage3["阶段三：生成与导出"]
         C1[用户确认生成] --> C2[调用 Painter Agent]
-        C2 --> C3[Nano-Banana / 即梦 API 生图]
+        C2 --> C3[Nano-Banana API 生图]
         C3 --> C4{生成成功?}
         C4 -->|是| C5[返回生成结果]
         C4 -->|否| C6[3次重试后降级提示]
@@ -619,7 +619,7 @@ sequenceDiagram
 
     A->>P: generate_image(prompt, width, height, reference_image)
     P->>P: 判断 IMAGE_PROVIDER 环境变量
-    alt 即梦模式
+    alt Nano-Banana 模式
         P->>NB: POST {prompt, sessionId, size}
         NB-->>P: {"status": "submitted", "task_id": "..."}
         loop 轮询（最多 150 次，每 2 秒）

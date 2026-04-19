@@ -428,7 +428,7 @@ Planner Agent 支持通过对话触发以下画布操作：
 ```
 
 **支持的生图引擎**：
-- Nano-Banana 2 / 即梦 - 推荐，国内可用
+- Nano-Banana 2 - 推荐，国内可用
 - DALL-E 3（OpenAI）
 
 ### 4.23 用户记忆系统（FR-MEM-01 ~ FR-MEM-04）
