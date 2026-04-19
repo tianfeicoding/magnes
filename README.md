@@ -50,20 +50,21 @@
 |------|------|
 | 💬 **AI 对话助手** | 右侧常驻对话面板，自然语言驱动画布节点创建与任务执行 |
 | 🎨 **可视化工作流画布** | 拖拽式节点编排，实时预览每个 AI 步骤的输出 |
-| 🤖 **中心化多智能体** | Planner、CopyWriter、Slicer、Refiner、Painter、Composer 6 大 Agent 统一调度 |
+| 🤖 **中心化多智能体** | Router + Designer + Creative + Knowledge 4 大 Agent 调度，9 大 Expert 执行 |
 | ⚙️ **精细编排节点** | 像素级调整图层、文字、配色，支持多版本对比与高清导出 |
 | 🖼️ **AI 生图集成** | 支持 Nano-Banana 2（即梦）/ DALL-E 3 双引擎，一键替换背景与场景 |
 | 🔄 **提示词自迭代** | AI 反推参考图风格 Prompt，自动迭代优化直到输出满意结果 |
 | 🛒 **商品图生成 Skill** | 上传白底商品图，自动识别品类并替换为电商场景图 |
 | 📦 **批量化产出** | 一次输入批量生成多版本海报，支持模板一键套用与翻页预览 |
-| 🧠 **长短期记忆** | Soul.md（长期偏好）+ MEMORY.md（中期记忆索引），持续学习用户风格 |
+| 💾 **项目持久化** | 画布状态自动保存，支持多项目管理与历史版本快照 |
+| 🧠 **长短期记忆** | Soul.md（长期偏好）+ CanvasActionLog（操作审计）+ Memory Reflux（AI 提取偏好） |
 | 🔍 **笔记灵感库** | 搜索并聚合真实小红书笔记，AI 提取洞察并标注灵感来源 |
 | 📋 **图文模版系统** | 内置多种小红书排版风格，支持批量套用，可保存自定义模版 |
 | ✏️ **AI 文案编辑** | 智能润色、扩写、缩写，所见即所得的文案精修体验 |
 | 📚 **品牌知识库（RAG）** | 上传品牌手册、Brief、商品清单，AI 创作时自动调用品牌知识 |
 | 📊 **RAG 质量评测** | 内置 RAGAS 评估看板，实时监控知识库检索质量 |
 | 📡 **SSE 实时进度** | 生成过程逐步可见，每个 Agent 执行状态即时推送 |
-| 🖨️ **高清图片导出** | Playwright 服务端截图，输出海报级高分辨率 PNG |
+| 🖨️ **高清图片导出** | html-to-image 前端 DOM 导出 + Playwright 服务端截图，输出海报级高分辨率 PNG |
 
 ---
 
@@ -75,17 +76,21 @@
          ▼
 API 服务层 (FastAPI + Uvicorn)
   ├── /api/v1/tasks      → Designer 工作流任务分发
-  ├── /api/v1/dialogue   → Planner 对话 SSE 流
+  ├── /api/v1/dialogue   → Router Agent 对话 SSE 流
+  ├── /api/v1/projects   → 项目持久化与快照管理
+  ├── /api/v1/action-logs→ 画布操作审计日志
+  ├── /api/v1/memory     → 用户偏好记忆提取
   ├── /api/v1/templates  → 图文模版 CRUD
   ├── /api/v1/history    → 生成历史审计
-  ├── /api/v1/export     → Playwright 高清导出
+  ├── /api/v1/export     → 高清图片导出
   ├── /api/v1/rag        → 品牌知识库管理
   └── /api/v1/mcp        → MCP 工具调用
          │
          ▼
 智能体层 (LangGraph)
-  ├── Designer 工作流: Slicer → Refiner → Painter → Composer → Reviewer
-  └── Planner 对话图: Planner → CopyWriter / InspirationAnalyst / KnowledgeAgent
+  ├── Designer 工作流: Slicer → [Refiner/LayoutAnalyzer/StyleAnalyzer]
+  │                    → StyleEvolve → Painter → StyleCritic → Composer → Reviewer
+  └── Router 对话图: Router → DesignerAgent / CreativeAgent / KnowledgeAgent
          │
          ▼
 核心服务层
@@ -104,7 +109,7 @@ API 服务层 (FastAPI + Uvicorn)
 | AI 引擎 | LangGraph, LangChain, OpenAI 兼容接口 |
 | RAG | LlamaIndex, ChromaDB, rank-bm25（混合检索） |
 | 数据库 | SQLite + aiosqlite（开发） / PostgreSQL（生产推荐） |
-| 图片处理 | Playwright（截图导出）, Pillow（压缩）, aiohttp（异步下载） |
+| 图片处理 | html-to-image（前端 DOM 导出）, Playwright（服务端截图）, Pillow（压缩） |
 
 ---
 
@@ -198,28 +203,41 @@ magnes/
 │   ├── main.py                 # FastAPI 应用入口
 │   └── app/
 │       ├── agents/             # LangGraph 智能体
-│       │   ├── planner/        # Planner 对话图（意图解析、文案生成）
-│       │   ├── painter.py      # AI 背景生成（Nano-Banana / DALL-E 3）
-│       │   ├── slicer.py       # 图层切片（Qwen 视觉分析）
-│       │   ├── refiner.py      # 风格反推（参考图→风格 Prompt）
-│       │   ├── composer.py     # 排版合成（图层 + 模版 → HTML）
-│       │   ├── copy_writer.py  # 小红书文案生成
-│       │   └── security_check.py # 敏感词过滤
+│       │   ├── planner/        # Router Agent（意图解析、路由分发）
+│       │   │   ├── router.py
+│       │   │   ├── graph.py
+│       │   │   └── state.py
+│       │   ├── designer_agent.py   # 视觉生成 Agent
+│       │   ├── creative_agent.py   # 文案与灵感 Agent
+│       │   ├── knowledge_agent.py  # 品牌知识库 Agent
+│       │   └── experts/        # 领域执行层（Expert）
+│       │       ├── refiner.py
+│       │       ├── layout_analyzer.py
+│       │       ├── style_analyzer.py
+│       │       ├── style_evolve.py
+│       │       ├── style_critic.py
+│       │       ├── painter.py
+│       │       ├── copy_writer.py
+│       │       ├── inspiration_analyst.py
+│       │       └── visual_critic.py
 │       ├── api/                # FastAPI 路由
 │       ├── core/               # 核心服务（LLM、DB、Playwright、MCP）
+│       ├── models/             # SQLAlchemy 数据模型（Project、Snapshot 等）
 │       ├── rag/                # RAG 模块（LlamaIndex + ChromaDB + BM25）
-│       ├── schema/             # MagnesState TypedDict
-│       └── skills/             # 可扩展业务技能包
+│       ├── schema/             # MagnesState / PlannerState TypedDict
+│       ├── skills/             # 可扩展业务技能包
+│       └── tools/              # 工具节点（Slicer、Composer、Reviewer 等）
 │
 ├── frontend/                   # 纯静态前端
 │   ├── index.html              # 主入口
 │   ├── src/                    # JSX 源码
 │   │   ├── app.js              # 主画布组件
 │   │   ├── context/            # React Context 全局状态
+│   │   ├── hooks/              # 自定义 React Hooks
 │   │   ├── nodes/              # ReactFlow 节点组件
 │   │   ├── components/ui/      # 对话面板、遮罩编辑器等 UI 组件
 │   │   ├── services/           # API 调用服务
-│   │   └── utils/              # 工具函数、常量、节点工厂
+│   │   └── utils/              # 工具函数、常量、节点工厂、API Client
 │   └── js/compiled/            # Babel 编译产物（自动生成）
 │
 ├── scripts/
@@ -241,33 +259,52 @@ Magnes 内置两套独立的 LangGraph 智能体图：
 用户触发
     │
     ▼
-init_node              ← 初始化 MagnesState，注入输入参数
-    ├── slicer_node    ← 调用 Qwen 视觉模型，分析输入图片图层
-    ├── refiner_node   ← 对参考图进行风格反推，输出 style_prompt
-    └── painter_node   ← 调用 Nano-Banana 2 / DALL-E 3 生成背景
+init_node                        ← 初始化 MagnesState，注入输入参数
+    │
+    ▼
+slicer_node                      ← 调用 Qwen 视觉模型，分析输入图片图层
+    │
+    ├──→ refiner_node            ← 风格反推（参考图 → style_prompt）
+    ├──→ layout_analyzer_node    ← 排版分析（计算归一化坐标）
+    └──→ style_analyzer_node     ← 美学基因提取（双语提示词）
             │
             ▼
-    composer_node      ← 合并图层 + 文案 + 模版，生成排版 HTML
+    style_evolve_node            ← 提示词迭代演化（V0 → Vn，用户驱动 ReAct）
             │
             ▼
-    reviewer_node      ← 美学审核
+    painter_node                 ← 调用 Nano-Banana 2 / DALL-E 3 生成背景
+            │
+            ▼
+    process_evolution_update     ← 关联生成图与版本历史
+            │
+            ▼
+    style_critic_node            ← 视觉审计评分（clone / evolution 模式）
+            │
+            ▼
+    composer_node                ← 合并图层 + 文案 + 模版，生成排版 HTML
+            │
+            ▼
+    reviewer_node                ← 美学审核
             │
             ▼
          输出结果（实时通过 SSE 推送每个步骤）
 ```
 
-### Planner 对话图（意图驱动）
+### Router 对话图（意图驱动）
 
 ```
 用户对话输入
     │
     ▼
-planner_agent          ← LLM 解析用户意图，决定路由
-    ├── copy_writer    → 生成小红书文案（标题+正文+话题标签）
-    │       └── security_check  → 敏感词过滤
-    ├── inspiration_analyst  → RAG 检索灵感库，生成内容洞察
-    ├── knowledge_agent      → 从品牌知识库中检索回答
-    └── summarizer           → 长对话自动压缩摘要
+router_agent               ← LLM 解析用户意图，注入 Soul.md 记忆，输出 action
+    ├──→ designer_agent    → 处理视觉生成请求（生图、提示词优化、风格保持）
+    │       ├── style_evolve  → 提示词演化
+    │       └── painter       → 调用生图 API
+    ├──→ creative_agent    → 处理内容创作请求（文案、灵感分析、搜索）
+    │       ├── copy_writer       → 生成小红书文案
+    │       └── inspiration_analyst → RAG 检索灵感库
+    ├──→ knowledge_agent   → 从品牌知识库中检索回答（RAG 混合检索）
+    └──→ chat              → 直接对话回复（Summary）
 ```
 
 ---
@@ -298,13 +335,23 @@ npm run build
 npm run build:watch
 ```
 
-### 新增 Agent
+### 自定义一级 Agent
 
-1. 在 `backend/app/agents/` 下创建新文件
-2. 在 `backend/app/core/workflow.py` 或 `agents/planner/graph.py` 中注册节点
-3. 在 `backend/app/core/prompts.py` 中添加对应 System Prompt
+1. 在 `backend/app/agents/` 下创建 `{name}_agent.py`，实现 `call_{name}_model(state)` 入口函数
+2. 在 `backend/app/agents/planner/router.py` 的 `VALID_ACTIONS` 中注册 action
+3. 在 `backend/app/agents/planner/graph.py` 中注册节点和边
 
-### 新增前端节点类型
+### 自定义 Expert
+
+**节点型 Expert**（加入 Designer Workflow）：
+1. 在 `backend/app/agents/experts/` 下创建 `{name}.py`，实现 `{name}_node(state)` 函数
+2. 在 `backend/app/core/workflow.py` 中注册节点和编排边
+
+**函数型 Expert**（被 Agent 内联调用）：
+1. 在 `backend/app/agents/experts/` 下创建 `{name}.py`，实现纯函数接口
+2. 在调用方 Agent 中通过 `await` 直接调用
+
+### 自定义前端节点类型
 
 1. 在 `frontend/src/nodes/rf/` 下创建节点组件
 2. 在 `frontend/src/app.js` 的 `nodeTypes` 映射表中注册
