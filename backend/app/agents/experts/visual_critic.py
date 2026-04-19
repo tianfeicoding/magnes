@@ -1,5 +1,5 @@
 """
-Visual Critic Worker
+Visual Critic Expert
 负责对 AI 生成的图片进行质量评估与意图对齐分析。
 支持两种评分模式：还原模式(clone) 和 创作模式(evolution)
 """

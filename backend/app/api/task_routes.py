@@ -20,8 +20,8 @@ from app.models import GenerationHistory
 from app.tools.painting_tool import call_image_generate
 from app.tools.visual_analyzer import analyze_visual_style # 假设存在此工具
 from app.core.storage_utils import download_and_persist_image
-from app.agents.workers.visual_critic import critic_manager # 导入评价员
-from app.agents.workers.style_analyzer import style_analyzer_node
+from app.agents.experts.visual_critic import critic_manager # 导入评价员
+from app.agents.experts.style_analyzer import style_analyzer_node
 from app.core.workflow import create_workflow
 from app.schema.state import MagnesState
 

@@ -58,7 +58,7 @@ async def _execute_xhs_search(state: PlannerState, decision: dict):
         return {"final_decision": {**decision, "reply": "搜索失败"}, "messages": [AIMessage(content="搜索失败")]}
 
 async def _execute_analyze_inspiration(state: PlannerState, decision: dict):
-    from app.agents.workers.inspiration_analyst import analyze_inspiration_logic
+    from app.agents.experts.inspiration_analyst import analyze_inspiration_logic
     from app.core.semantic_service import extract_semantic_content
     from app.core.template_utils import get_available_templates_metadata
     
@@ -96,7 +96,7 @@ async def _execute_analyze_inspiration(state: PlannerState, decision: dict):
     }
 
 async def _execute_copy_writer_llm(state: PlannerState, decision: dict):
-    from app.agents.workers.copy_writer import generate_copy_writing
+    from app.agents.experts.copy_writer import generate_copy_writing
     from app.tools.security_check import check_sensitive_words
     
     # 获取需要排版或写入的内容

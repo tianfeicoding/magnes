@@ -6,7 +6,7 @@ Style Critic Agent
 """
 from datetime import datetime
 from app.schema.state import MagnesState
-from app.agents.workers.visual_critic import critic_manager
+from app.agents.experts.visual_critic import critic_manager
 
 
 async def style_critic_node(state: MagnesState):

@@ -3,12 +3,12 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.schema.state import MagnesState
 from app.tools.slicer import slicer_node
-from app.agents.workers.refiner import refiner_node
-from app.agents.workers.layout_analyzer import layout_analyzer_node
-from app.agents.workers.style_analyzer import style_analyzer_node
-from app.agents.workers.style_evolve import style_evolve_node
-from app.agents.workers.style_critic import style_critic_node
-from app.agents.workers.painter import painter_node
+from app.agents.experts.refiner import refiner_node
+from app.agents.experts.layout_analyzer import layout_analyzer_node
+from app.agents.experts.style_analyzer import style_analyzer_node
+from app.agents.experts.style_evolve import style_evolve_node
+from app.agents.experts.style_critic import style_critic_node
+from app.agents.experts.painter import painter_node
 from app.tools.composer import composer_node
 from app.tools.reviewer import reviewer_node
 from app.agents.knowledge_agent import knowledge_agent_node
