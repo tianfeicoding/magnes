@@ -31,7 +31,7 @@
         "js/compiled/components/ui/emojiicons.js",
         "js/compiled/components/ui/button.js",
         "js/compiled/components/ui/modal.js",
-        "src/components/ui/LoginModal.js",
+        "js/compiled/components/ui/LoginModal.js",
         "js/compiled/context/app-context.js",
         "js/compiled/hooks/use-magnes-history.js",
         "js/compiled/hooks/use-magnes-node.js",
@@ -65,27 +65,27 @@
         "js/compiled/nodes/rf/layout-analyzer-rf.js",
         "js/compiled/nodes/rf/style-analyzer-rf.js",
         "js/compiled/nodes/rf/style-validator-rf.js",  // V1.0: 风格验证结果节点
+        "js/compiled/nodes/rf/mask-fill-node-rf.js",   // 遮罩抠图与合成节点
         "js/compiled/pages/rag/rag-utils.js",
         "js/compiled/pages/rag/rag-components.js",
         "js/compiled/pages/rag/rag-utils.js",
         "js/compiled/pages/rag/rag-components.js",
-        // 切换为 src 实时加载以绕过编译延迟
-        "src/pages/rag/rag-panels.js",
+        "js/compiled/pages/rag/rag-panels.js",
         "js/compiled/pages/rag/rag-modals.js",
 
-        // --- Stage 2: App.js Refactoring (使用 src 实时加载) ---
+        // --- Stage 2: App.js Refactoring ---
         "js/compiled/components/edges/ButtonEdge.js",
-        "src/components/rag/RagMiddleContent.js",
-        "src/components/layout/AppHeader.js",
-        "src/components/layout/AppModals.js",
-        "src/components/layout/RightSidebar.js",
+        "js/compiled/components/rag/RagMiddleContent.js",
+        "js/compiled/components/layout/AppHeader.js",
+        "js/compiled/components/layout/AppModals.js",
+        "js/compiled/components/layout/RightSidebar.js",
         "js/compiled/utils/parse-helpers.js",
-        "src/hooks/use-rag-data.js",
-        "src/hooks/use-window-events.js",
-        "src/hooks/use-node-operations.js",
-        "src/hooks/use-generation-service.js",
-        "src/hooks/use-create-node.js",
-        "src/app.js"
+        "js/compiled/hooks/use-rag-data.js",
+        "js/compiled/hooks/use-window-events.js",
+        "js/compiled/hooks/use-node-operations.js",
+        "js/compiled/hooks/use-generation-service.js",
+        "js/compiled/hooks/use-create-node.js",
+        "js/compiled/app.js"
     ];
 
     const version = window.MagnesComponents.version;

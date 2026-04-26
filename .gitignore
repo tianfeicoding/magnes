@@ -102,6 +102,7 @@ docs/
 /backend/*.log
 /backend/test_*.py
 /backend/curl_*.txt
+/backend/start.sh
 
 # ─── 前端研究/测试文件 ─────────────────────────────────────
 frontend/research/

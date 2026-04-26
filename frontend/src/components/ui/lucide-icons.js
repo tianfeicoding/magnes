@@ -110,6 +110,8 @@
         EyeOff: createIcon('EyeOff'),
         Settings2: createIcon('Settings2'),
         Sliders: createIcon('Sliders'),
+        Scissors: createIcon('Scissors'),
+        Undo: createIcon('Undo'),
         ExternalLink: createIcon('ExternalLink'),
         Images: createIcon('Images'),
         RefreshCw: createIcon('RefreshCw'),
@@ -136,5 +138,5 @@
     // Hamilton: 提前建立别名，确保顺序加载的 Node 脚本能立即读到 Icons
     window.MagnesComponents.UI.Icons = { ...LucideIcons };
 
-    console.log('✅ Lucide Icons 加载成功');
+    console.log('[Lucide Icons] Loaded');
 })();

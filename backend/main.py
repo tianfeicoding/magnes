@@ -50,6 +50,7 @@ from app.api.auth import router as auth_router                # FastAPI-Users �
 from app.api.auth_routes import router as config_router        # 配置管理路由
 from app.api.painter_routes import router as painter_router    # AI 绘图
 from app.api.project_routes import router as project_router    # 项目持久化
+from app.api.segment_routes import router as segment_router    # 图像分割与遮罩合成
 from app.memory.routes import router as memory_router          # 记忆系统
 from app.core.users import fastapi_users, auth_backend, current_user  # FastAPI-Users
 from app.middleware.auth import AuthMiddleware                  # 认证中间件
@@ -112,7 +113,7 @@ async def lifespan(app: FastAPI):
     try:
         # LlamaIndex 全局配置初始化
         init_rag_settings()
-        
+
         get_xhs_collection()      # 触发 ChromaDB 初始化
         get_gallery_collection()
         bm25 = get_bm25_index()
@@ -120,7 +121,7 @@ async def lifespan(app: FastAPI):
         print("📚 RAG 模块初始化完成（LlamaIndex + ChromaDB + BM25）")
     except Exception as e:
         print(f"⚠️ RAG 模块初始化失败（不影响主程序）: {e}")
-    
+
     yield
     
     # 关闭持久化连接
@@ -145,6 +146,36 @@ async def verify_token(
 
     # Debug log
     print(f"[Auth] Verifying token, length: {len(token)}, preview: {token[:20]}...")
+
+    # Legacy token support (hardcoded frontend token)
+    LEGACY_TOKEN = "magnes_secure_token_2026"
+    if token == LEGACY_TOKEN:
+        from app.models.user import User
+        from sqlalchemy import select
+        from datetime import datetime
+        import uuid
+
+        result = await db.execute(select(User).where(User.username == "legacy_user"))
+        user = result.scalar_one_or_none()
+        if user:
+            print(f"[Auth] Legacy token matched for user: {user.username}")
+            return user
+        # Create legacy user if not exists
+        new_user = User(
+            id=str(uuid.uuid4()),
+            username="legacy_user",
+            email=None,
+            is_active=True,
+            is_superuser=False,
+            created_at=datetime.utcnow(),
+        )
+        from fastapi_users.password import PasswordHelper
+        new_user.hashed_password = PasswordHelper().hash("legacy_password")
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        print(f"[Auth] Created legacy user: {new_user.username}")
+        return new_user
 
     # Try to validate as JWT token (new user system)
     try:
@@ -288,6 +319,7 @@ app.include_router(auth_router, prefix="/api/v1")                               
 app.include_router(config_router, prefix="/api/v1", dependencies=common_deps)   # 配置管理路由
 app.include_router(painter_router, prefix="/api/v1", dependencies=common_deps)  # AI 绘图
 app.include_router(project_router, prefix="/api/v1", dependencies=common_deps)  # 项目持久化
+app.include_router(segment_router, prefix="/api/v1", dependencies=common_deps)  # 图像分割与遮罩合成
 app.include_router(memory_router, prefix="/api/v1", dependencies=common_deps)   # 记忆系统
 
 # --- 挂载静态文件 (Frontend) ---

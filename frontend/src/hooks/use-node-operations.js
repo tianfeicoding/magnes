@@ -13,6 +13,7 @@
      */
     const useNodeOperations = ({
         nodes,
+        edges,
         setNodes,
         setEdges,
         reactFlowInstance,

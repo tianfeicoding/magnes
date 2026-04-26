@@ -274,6 +274,43 @@
             return () => window.removeEventListener('magnes:openSidebar', handleOpenSidebar);
         }, []);
 
+        // --- 3. 弹窗控制状态 (传给 AppModals) ---
+        const [toastMsg, setToastMsg] = useState('');
+        const [toastType, setToastType] = useState('');
+        const [toastPersistent, setToastPersistent] = useState(false);
+        const [draftModalOpen, setDraftModalOpen] = useState(false);
+        const [isDraftReadOnly, setIsDraftReadOnly] = useState(false);
+        const [draftContent, setDraftContent] = useState('');
+        const [draftTemplateId, setDraftTemplateId] = useState(null); // 灵感助手选中的模版 ID
+        const [currentDraftMsgId, setCurrentDraftMsgId] = useState(null); // 当前正在草稿箱编辑的消息 ID
+        const [publishModalOpen, setPublishModalOpen] = useState(false);
+        const [publishData, setPublishData] = useState(null);
+        const [detailModalOpen, setDetailModalOpen] = useState(false);
+        const [selectedDetailDoc, setSelectedDetailDoc] = useState(null);
+        const [detailContentOverride, setDetailContentOverride] = useState('');
+        const [sourceModalOpen, setSourceModalOpen] = useState(false);
+        const [sourceDocIds, setSourceDocIds] = useState([]);
+        const [activeSourceMap, setActiveSourceMap] = useState({});
+        const [sourceContent, setSourceContent] = useState('');
+
+        const toast = useCallback((msg, type = '', persistent = false) => {
+            setToastMsg(msg); setToastType(type); setToastPersistent(persistent);
+        }, []);
+
+        // --- 4. React Flow 核心编排 ---
+        const ReactFlowLib = window.ReactFlow || window.ReactFlowRenderer;
+        if (!ReactFlowLib) {
+            return (
+                <div className="flex items-center justify-center h-full bg-white font-bold text-zinc-400">
+                    React Flow 库尚未就绪，请刷新页面...
+                </div>
+            );
+        }
+        const { ReactFlow, useNodesState, useEdgesState, addEdge, Background, Controls } = ReactFlowLib;
+        const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
+        const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+        const [reactFlowInstance, setReactFlowInstance] = useState(null);
+
         // 处理侧边栏素材选中
         // 使用 ref 存储 sidebarContext 避免闭包问题
         const sidebarContextRef = React.useRef(sidebarContext);
@@ -345,43 +382,6 @@
             toast('✅ 已替换背景', 'success');
         }, [setNodes, prevTab]);
 
-        // --- 3. 弹窗控制状态 (传给 AppModals) ---
-        const [toastMsg, setToastMsg] = useState('');
-        const [toastType, setToastType] = useState('');
-        const [toastPersistent, setToastPersistent] = useState(false);
-        const [draftModalOpen, setDraftModalOpen] = useState(false);
-        const [isDraftReadOnly, setIsDraftReadOnly] = useState(false);
-        const [draftContent, setDraftContent] = useState('');
-        const [draftTemplateId, setDraftTemplateId] = useState(null); // 灵感助手选中的模版 ID
-        const [currentDraftMsgId, setCurrentDraftMsgId] = useState(null); // 当前正在草稿箱编辑的消息 ID
-        const [publishModalOpen, setPublishModalOpen] = useState(false);
-        const [publishData, setPublishData] = useState(null);
-        const [detailModalOpen, setDetailModalOpen] = useState(false);
-        const [selectedDetailDoc, setSelectedDetailDoc] = useState(null);
-        const [detailContentOverride, setDetailContentOverride] = useState('');
-        const [sourceModalOpen, setSourceModalOpen] = useState(false);
-        const [sourceDocIds, setSourceDocIds] = useState([]);
-        const [activeSourceMap, setActiveSourceMap] = useState({});
-        const [sourceContent, setSourceContent] = useState('');
-
-        const toast = useCallback((msg, type = '', persistent = false) => {
-            setToastMsg(msg); setToastType(type); setToastPersistent(persistent);
-        }, []);
-
-        // --- 4. React Flow 核心编排 ---
-        const ReactFlowLib = window.ReactFlow || window.ReactFlowRenderer;
-        if (!ReactFlowLib) {
-            return (
-                <div className="flex items-center justify-center h-full bg-white font-bold text-zinc-400">
-                    React Flow 库尚未就绪，请刷新页面...
-                </div>
-            );
-        }
-        const { ReactFlow, useNodesState, useEdgesState, addEdge, Background, Controls } = ReactFlowLib;
-        const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
-        const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-        const [reactFlowInstance, setReactFlowInstance] = useState(null);
-
         // --- 修复级联删除崩溃 (Cascading Deletion) ---
         // 当父节点被删除时，同步删除其子节点（如附属属性面板），防止 React Flow 因 Parent node not found 崩溃
         const onNodesChange = useCallback((changes) => {
@@ -426,6 +426,7 @@
                 'rednote-stylelab': Nodes.RednoteStyleLabNodeRF,
                 'rednote-preview': Nodes.RednotePreviewNodeRF,
                 'version-gallery': Nodes.VersionGalleryNodeRF,
+                'mask-fill': Nodes.MaskFillNodeRF,
             };
         }, []);
 
@@ -442,7 +443,7 @@
         const rag = useRagData(activeTab, toast);
 
         // 画布基础操作
-        const nodeOps = useNodeOperations({ nodes, setNodes, setEdges, reactFlowInstance, addEdge });
+        const nodeOps = useNodeOperations({ nodes, edges, setNodes, setEdges, reactFlowInstance, addEdge });
 
         // 生成服务对接
         useGenerationService({

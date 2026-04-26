@@ -166,9 +166,40 @@
         const nodes = useNodes();
         const edges = useEdges();
 
+        // 缓存最后有效的上游图片 URL，防止 transient undefined 导致回退到 stale data.content
+        const lastValidUpstreamImageRef = React.useRef(
+            typeof data.content === 'string' && (data.content.startsWith('data:image') || data.content.startsWith('http://') || data.content.startsWith('https://'))
+                ? data.content
+                : null
+        );
+
         // --- 恢复核心数据流逻辑 ---
-        const upstreamId = useMemo(() => edges.find(e => e.target === id)?.source, [edges, id]);
-        const upstreamNode = useMemo(() => nodes.find(n => n.id === upstreamId), [nodes, upstreamId]);
+        // 支持多上游输入：遍历所有输入边，优先选择有有效 content/image_url 的上游节点
+        // 特别优先 mask-fill 类型节点（合成结果节点）
+        const upstreamNode = useMemo(() => {
+            const connectedEdges = edges.filter(e => e.target === id);
+            if (connectedEdges.length === 0) return null;
+
+            // 第一轮：优先找 mask-fill 类型且有有效内容的源节点
+            for (let i = connectedEdges.length - 1; i >= 0; i--) {
+                const node = nodes.find(n => n.id === connectedEdges[i].source);
+                if (node?.type === 'mask-fill' && (node?.data?.content || node?.data?.image_url || node?.data?.background_url)) {
+                    console.log('[FineTune] 优先选中 mask-fill 上游节点:', node.id, 'content 类型:', typeof node.data?.content);
+                    return node;
+                }
+            }
+
+            // 第二轮：找最后连接的边（通常是最新连的），或者找有 content/image_url 的源节点
+            for (let i = connectedEdges.length - 1; i >= 0; i--) {
+                const node = nodes.find(n => n.id === connectedEdges[i].source);
+                if (node?.data?.content || node?.data?.image_url || node?.data?.background_url) {
+                    console.log('[FineTune] 选中上游节点:', node.id, '类型:', node.type, 'content 类型:', typeof node.data?.content);
+                    return node;
+                }
+            }
+            // fallback 到第一条边
+            return nodes.find(n => n.id === connectedEdges[0].source);
+        }, [edges, nodes, id]);
         const upstreamStyleId = upstreamNode?.data?.selectedStyleId;
 
         // 监听上游变化，如果是切换了模版，重置 Dirty 状态以便同步新模版内容
@@ -183,16 +214,68 @@
         const upstreamContent = upstreamNode?.data?.content;
         const upstreamRawData = upstreamNode?.data?.rawData || upstreamNode?.data; // 原始数据源（包含 items）
 
+        // 辅助：判断是否为图片 URL（含 data:image、http、https）
+        const isImageUrl = (val) => typeof val === 'string' && (val.startsWith('data:image') || val.startsWith('http://') || val.startsWith('https://'));
+
+        // 当上游传入有效图片 URL 时，缓存它并同步到本节点的 data.content
+        // 使用 useLayoutEffect 确保在 paint 前完成状态写入，下游节点在下一轮渲染即可读取
+        React.useLayoutEffect(() => {
+            if (upstreamContent && isImageUrl(upstreamContent)) {
+                lastValidUpstreamImageRef.current = upstreamContent;
+                setNodes(nds => nds.map(node =>
+                    node.id === id ? { ...node, data: { ...node.data, content: upstreamContent } } : node
+                ));
+                console.log('[FineTune] useLayoutEffect 同步上游图片 URL 到 data.content');
+            }
+        }, [upstreamContent, id, setNodes]);
+
+        // 守护逻辑：如果 data.content 被外部（如自动保存回写）清空，但缓存中仍有有效图片，则自动恢复
+        React.useEffect(() => {
+            if (!data.content && lastValidUpstreamImageRef.current && isImageUrl(lastValidUpstreamImageRef.current)) {
+                setNodes(nds => nds.map(node =>
+                    node.id === id ? { ...node, data: { ...node.data, content: lastValidUpstreamImageRef.current } } : node
+                ));
+                console.log('[FineTune] 守护恢复：data.content 为空，已从缓存恢复');
+            }
+        }, [data.content, id, setNodes]);
+
+        // 调试：追踪 data.content 变化
+        React.useEffect(() => {
+            console.log('[FineTune] data.content 变化:', typeof data.content, data.content ? (typeof data.content === 'string' ? data.content.slice(0, 50) : '对象') : '空');
+        }, [data.content]);
 
         // 数据流处理：注入页面偏移映射逻辑
         const processedSchema = useMemo(() => {
             let baseSchema = { layers: [] };
             let source = 'empty';
-            if (data.isDirty && data.content) {
+
+            // 使用缓存的上游图片 URL 防止 transient undefined
+            const effectiveUpstreamContent = upstreamContent || lastValidUpstreamImageRef.current;
+
+            console.log('[FineTune] processedSchema 计算中 | upstreamContent 类型:', typeof upstreamContent, 'effective 类型:', typeof effectiveUpstreamContent, 'self content 类型:', typeof data.content);
+
+            // 兼容上游图片节点（如 MaskFillNode、InputImageNode）直接传入的图片 URL
+            const upstreamImg = effectiveUpstreamContent && isImageUrl(effectiveUpstreamContent) ? effectiveUpstreamContent : null;
+            const selfImg = data.content && isImageUrl(data.content) ? data.content : null;
+            if (upstreamImg || selfImg) {
+                const imgUrl = upstreamImg || selfImg;
+                console.log('[FineTune] 识别到图片 URL，生成 image layer | URL 前 50 字符:', imgUrl.slice(0, 50));
+                baseSchema = {
+                    layers: [{
+                        id: `upstream-image-${id}`,
+                        type: 'image',
+                        role: 'image',
+                        url: imgUrl,
+                        bbox: [0, 0, 1024, 1024],
+                        z_index: 0,
+                    }]
+                };
+                source = 'upstream-image-url';
+            } else if (data.isDirty && data.content) {
                 baseSchema = data.content;
                 source = 'data.content (dirty)';
-            } else if (upstreamContent && upstreamContent.layers) {
-                baseSchema = upstreamContent;
+            } else if (effectiveUpstreamContent && effectiveUpstreamContent.layers) {
+                baseSchema = effectiveUpstreamContent;
                 source = 'upstreamContent';
             } else {
                 baseSchema = data.content || data.layoutData || { layers: [] };
@@ -1324,9 +1407,12 @@
                                             >
                                                 {layer.url ? (
                                                     <img
+                                                        key={layer.url ? layer.url.slice(0, 20) + '-' + layer.url.length : 'no-url'}
                                                         src={resolveImageUrl(layer.url)}
                                                         crossOrigin="anonymous"
                                                         className={`w-full h-full pointer-events-none ${isBackground ? 'object-cover' : 'object-contain'}`}
+                                                        onLoad={() => console.log('[FineTune] 图片加载成功:', layer.id, layer.url?.slice(0, 50))}
+                                                        onError={(e) => console.error('[FineTune] 图片加载失败:', layer.id, e)}
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full border border-dashed border-black/20 flex flex-col items-center justify-center bg-zinc-50/50">

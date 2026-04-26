@@ -26,7 +26,7 @@
         {
             category: '输入与采集',
             nodes: [
-                { type: 'rednote-content', label: '内容输入', icon: 'Edit3', fallback: '✍️' },
+                { type: 'rednote-content', label: '内容输入', icon: 'Edit3', fallback: 'TXT' },
                 { type: 'input-image', label: '图片输入', icon: 'Image', fallback: 'IMG' },
                 { type: 'text-node', label: '文字节点', icon: 'FileText', fallback: 'T' }
             ]
@@ -38,7 +38,8 @@
                 { type: 'style-analyzer', label: '风格分析', icon: 'Palette', fallback: 'STL' },
                 { type: 'layer-split', label: '图层切片', icon: 'Layers', fallback: 'SLIT' },
                 { type: 'composer', label: '布局融合', icon: 'Layout', fallback: 'COMP' },
-                { type: 'image-text-template', label: '图文模版', icon: 'Layout', fallback: 'TMP' }
+                { type: 'image-text-template', label: '图文模版', icon: 'Layout', fallback: 'TMP' },
+                { type: 'mask-fill', label: '遮罩合成', icon: 'Scissors', fallback: 'MASK' }
             ]
         },
         {
@@ -121,5 +122,5 @@
     window.MagnesComponents.UI = window.MagnesComponents.UI || {};
     window.MagnesComponents.UI.ComponentLibrary = ComponentLibrary;
 
-    console.log('✅ ComponentLibrary (JSX) 加载成功');
+    console.log('[ComponentLibrary] Loaded');
 })();
