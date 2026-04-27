@@ -214,7 +214,7 @@ async def build_memory_summary_for_injection(
     rejections = await list_memories(db, user_id, memory_type="rejection")
     if rejections:
         parts.append("[用户明确不喜欢]")
-        for r in rejections[-5:]:
+        for r in rejections[:5]:
             reason = r.content.get("reason") or r.content.get("subject") or str(r.content)
             parts.append(f"- {reason}")
 
