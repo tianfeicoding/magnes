@@ -63,6 +63,34 @@ def _extract_activity_content(messages: List[BaseMessage], include_skills: bool 
     print(f"[Magnes Source Engine] 🔍 Selected best activity source (Score: {candidates[0]['score']}, Human: {candidates[0]['is_human']})", flush=True)
     return best_match
 
+def _is_waiting_for_template_choice(messages: List[BaseMessage]) -> bool:
+    """Return True only when a recent assistant turn actually offered templates."""
+    for msg in reversed(messages[-8:-1]):
+        if not isinstance(msg, AIMessage):
+            continue
+
+        content = str(msg.content or "")
+        if not content:
+            continue
+
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            parsed = _parse_planner_response(content) if ("{" in content or "```json" in content) else None
+
+        if isinstance(parsed, dict) and parsed.get("templates"):
+            prompt_text = " ".join(
+                str(parsed.get(field, ""))
+                for field in ("reply", "follow_up_reply", "thought")
+            )
+            if any(kw in prompt_text for kw in ["选择", "模版", "模板", "编号"]):
+                return True
+
+        if "templates" in content and any(kw in content for kw in ["选择", "模版", "模板", "编号"]):
+            return True
+
+    return False
+
 async def _check_fast_paths(last_msg: str, state: PlannerState) -> Optional[dict]:
     """处理强规则UI指令，提取模版提取等"""
     messages = state.get("messages", [])
@@ -103,6 +131,8 @@ async def _check_fast_paths(last_msg: str, state: PlannerState) -> Optional[dict
             return {"messages": [AIMessage(content=reply_content)], "final_decision": mock_decision}
 
     if last_msg.strip().isdigit():
+        if not _is_waiting_for_template_choice(messages):
+            return None
         choice_idx = int(last_msg.strip()) - 1
         templates = await get_available_templates_metadata()
         use_emoji = "Emoji" in last_msg # 数字选择同样检测上下文（通常来自上一轮对话，这里稍后需要更精准识别）
