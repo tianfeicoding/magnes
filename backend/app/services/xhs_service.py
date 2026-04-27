@@ -7,7 +7,7 @@ from app.rag.models.note_document import NoteDocument
 from app.rag.vectorstore.chroma_store import upsert_document
 from app.rag.retrieval.bm25_retriever import get_bm25_index
 
-async def search_xhs_livesearch(prompt: str, limit: int = 10) -> Dict[str, Any]:
+async def search_xhs_livesearch(prompt: str, limit: int = 10, user_id: str = None) -> Dict[str, Any]:
     """
     通用小红书实时搜索服务：通过 MCP 搜索、抓取详情并同步到灵感库。
     """
@@ -144,7 +144,7 @@ async def search_xhs_livesearch(prompt: str, limit: int = 10) -> Dict[str, Any]:
             if note.get("xsec_token"):
                 doc.style_tags.append(f"xsec_token:{note.get('xsec_token')}")
             
-            await upsert_document(doc)
+            await upsert_document(doc, user_id=user_id)
             processed_docs.append({
                 "id": doc.id,
                 "title": doc.title,

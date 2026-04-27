@@ -47,8 +47,9 @@ async def _execute_xhs_search(state: PlannerState, decision: dict):
             if isinstance(msg, HumanMessage):
                 query = str(msg.content)
                 break
-                
-    res = await search_xhs_livesearch(query)
+
+    user_id = (state.get("extra_context") or {}).get("user_id")
+    res = await search_xhs_livesearch(query, user_id=user_id)
     if res.get("status") == "success":
         search_results = res.get("results") or []
         summary = res.get("summary") or "已抓取最新内容并存入灵感库。"

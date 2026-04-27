@@ -1072,6 +1072,12 @@
                                 setMessages(prev => prev.map(m =>
                                     m.id === currentAiMsgId ? { ...m, sourceIds: ids, results: event.results } : m
                                 ));
+                                // [兜底] 如果 results 包含 xhs_ 前缀的 ID，说明是灵感入库结果，自动刷新 RAG 数据
+                                const hasXhsResults = ids.some(id => id && id.startsWith('xhs_'));
+                                if (hasXhsResults) {
+                                    console.log('[ConversationPanel] 🔄 检测到 XHS 入库结果，自动刷新灵感库');
+                                    window.dispatchEvent(new CustomEvent('magnes:refresh_knowledge_base'));
+                                }
                             } else if (event.type === 'refresh_rag') {
                                 console.log('[ConversationPanel] 🔄 收到后端刷新 RAG 指令');
                                 window.dispatchEvent(new CustomEvent('magnes:refresh_knowledge_base'));
