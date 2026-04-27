@@ -19,7 +19,8 @@ from .history import (
     get_planner_history, 
     clear_planner_history, 
     delete_planner_session, 
-    get_all_sessions
+    get_all_sessions,
+    make_user_thread_id
 )
 from .streaming import handle_stream_events
 
@@ -159,6 +160,7 @@ __all__ = [
     "clear_planner_history", 
     "delete_planner_session", 
     "get_all_sessions",
+    "make_user_thread_id",
     "init_planner_graph",
     "PlannerState"
 ]

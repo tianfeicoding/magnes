@@ -16,7 +16,9 @@ import json
 
 from app.core import prompts
 from app.core.database import get_db
+from app.core.users import current_user
 from app.models import GenerationHistory
+from app.models.user import User
 from app.tools.painting_tool import call_image_generate
 from app.tools.visual_analyzer import analyze_visual_style # 假设存在此工具
 from app.core.storage_utils import download_and_persist_image
@@ -43,7 +45,8 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
             source_images = [img for img in source_images if img and str(img).strip()]
             
             model_id = data.get("options", {}).get("model")
-            conversation_id = data.get("options", {}).get("conversationId")
+            options = data.get("options", {})
+            conversation_id = options.get("conversationId")
 
             print(f"DEBUG: [Task Background] {task_id} Processing. Images: {len(source_images)}, Conv: {conversation_id}")
 
@@ -378,17 +381,18 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                 await db.commit()
 
             # 异步记忆回填：如果任务带了 conversationId，将结果反向注入对话历史
-            conversation_id = data.get("options", {}).get("conversationId")
-            if conversation_id and (result_url or result_content):
+            options = data.get("options", {})
+            planner_thread_id = options.get("plannerThreadId") or options.get("conversationId")
+            if planner_thread_id and (result_url or result_content):
                 from app.agents.planner import add_planner_history
                 # 构造一条 AI 的自我确认消息供后续回溯
                 if task_type == "image" and result_url:
                     # 向对话历史回填一条友好的完成消息（含图片）
                     # 注意：前端 use-generation-service.js 已移除冗余持久化，此处是唯一写入源
                     memo = "✅ 创作已完成：新图已存入生图库。"
-                    await add_planner_history(conversation_id, memo, image_url=result_url)
+                    await add_planner_history(planner_thread_id, memo, image_url=result_url)
                 elif result_content:
-                    await add_planner_history(conversation_id, f"任务分析完成：{str(result_content)[:200]}...")
+                    await add_planner_history(planner_thread_id, f"任务分析完成：{str(result_content)[:200]}...")
 
         except Exception as e:
             print(f"[Task Background] Error in background task {task_id}: {e}")
@@ -399,7 +403,12 @@ async def run_ai_task_background(task_id: str, data: dict, db_session_factory):
                 await db.commit()
 
 @router.post("/run")
-async def run_task(data: dict, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def run_task(
+    data: dict,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(current_user)
+):
     """启动异步 AI 任务"""
     print(f"DEBUG: [Task Routes] Received request: {json.dumps(data, indent=2, ensure_ascii=False)[:1000]}...")
     task_id = str(uuid.uuid4())
@@ -442,6 +451,10 @@ async def run_task(data: dict, background_tasks: BackgroundTasks, db: AsyncSessi
     
     # 2. 启动后台任务 (Hamilton Fix: 同步清洗下发载荷)
     data["prompt"] = prompt_str
+    options = data.setdefault("options", {})
+    if isinstance(options, dict) and options.get("conversationId"):
+        from app.agents.planner import make_user_thread_id
+        options["plannerThreadId"] = make_user_thread_id(user.id, options["conversationId"])
     from app.core.database import AsyncSessionLocal
     background_tasks.add_task(run_ai_task_background, task_id, data, AsyncSessionLocal)
     

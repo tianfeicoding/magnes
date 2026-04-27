@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.planner import run_planner
+from app.agents.planner import run_planner, make_user_thread_id
 from app.core.users import current_user
 from app.models.user import User
 from app.core.database import get_db
@@ -90,17 +90,25 @@ async def sse_event_generator(request: DialogueRequest, db: AsyncSession, user: 
             if memory_summary:
                 print(f"[Dialogue] 🧠 Memory summary injected, length={len(memory_summary)}")
 
-        # 流式运行 Planner (接入 LangGraph thread_id)
+        planner_thread_id = make_user_thread_id(user.id, request.conversationId)
+
+        # 流式运行 Planner (接入按用户隔离的 LangGraph thread_id)
         # 注意：传给 Planner 的是持久化后的本地 URL，而非 base64
+        # 将 user_id 注入 extra_context，供下游 Agent（如 XHS 搜索入库）使用
+        enriched_extra_context = {
+            **(request.extraContext or {}),
+            "user_id": user.id,
+        }
+
         async for event in run_planner(
             message=request.message,
-            conversation_id=request.conversationId,
+            conversation_id=planner_thread_id,
             canvas_context=request.canvasContext,
             active_skill=request.activeSkill,
             skill_summary=request.skillSummary,
             active_image_url=effective_image_url,  # ✅ 已转换为本地 URL
             active_image_ratio=request.ratio,
-            extra_context=request.extraContext,
+            extra_context=enriched_extra_context,
             memory_summary=memory_summary,
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -142,14 +150,17 @@ async def run_dialogue(
     )
 
 @router.get("/history")
-async def get_dialogue_history(conversationId: str):
+async def get_dialogue_history(
+    conversationId: str,
+    user: User = Depends(current_user)
+):
     """
     GET /api/v1/dialogue/history?conversationId=...
     获取指定会话的历史记录。
     """
     try:
         from app.agents.planner import get_planner_history
-        history = await get_planner_history(conversationId)
+        history = await get_planner_history(make_user_thread_id(user.id, conversationId))
         return {"status": "success", "history": history}
     except Exception as e:
         print(f"[dialogue_routes] ❌ 获取历史失败: {e}")
@@ -158,13 +169,16 @@ async def get_dialogue_history(conversationId: str):
         return {"status": "success", "history": []}
 
 @router.delete("/clear")
-async def clear_dialogue_history(conversationId: str):
+async def clear_dialogue_history(
+    conversationId: str,
+    user: User = Depends(current_user)
+):
     """
     DELETE /api/v1/dialogue/clear?conversationId=...
     清空指定会话的历史记录。
     """
     from app.agents.planner import clear_planner_history
-    await clear_planner_history(conversationId)
+    await clear_planner_history(make_user_thread_id(user.id, conversationId))
     return {"status": "success"}
 
 class ManualMessageRequest(BaseModel):
@@ -174,33 +188,45 @@ class ManualMessageRequest(BaseModel):
     imageUrl: Optional[str] = None
 
 @router.post("/message")
-async def record_manual_message(request: ManualMessageRequest):
+async def record_manual_message(
+    request: ManualMessageRequest,
+    user: User = Depends(current_user)
+):
     """
     POST /api/v1/dialogue/message
     手动存入一条对话消息到历史记录中。支持多模态（图片）。
     """
     try:
         from app.agents.planner import add_planner_history
-        await add_planner_history(request.conversationId, request.content, request.role, request.imageUrl)
+        await add_planner_history(
+            make_user_thread_id(user.id, request.conversationId),
+            request.content,
+            request.role,
+            request.imageUrl
+        )
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @router.get("/sessions")
-async def get_all_dialogue_sessions():
+async def get_all_dialogue_sessions(user: User = Depends(current_user)):
     """
     GET /api/v1/dialogue/sessions
     获取系统中所有已存在的会话记录。
     """
     from app.agents.planner import get_all_sessions
-    sessions = await get_all_sessions()
+    thread_prefix = make_user_thread_id(user.id, "")
+    sessions = await get_all_sessions(thread_prefix=thread_prefix)
     return {"status": "success", "sessions": sessions}
 @router.delete("/sessions/{conversationId}")
-async def delete_dialogue_session(conversationId: str):
+async def delete_dialogue_session(
+    conversationId: str,
+    user: User = Depends(current_user)
+):
     """
     DELETE /api/v1/dialogue/sessions/{id}
     物理删除指定的会话记录。
     """
     from app.agents.planner import delete_planner_session
-    await delete_planner_session(conversationId)
+    await delete_planner_session(make_user_thread_id(user.id, conversationId))
     return {"status": "success"}

@@ -13,6 +13,12 @@ from .parser import _parse_planner_response
 # 注意：planner_graph 将在 graph.py 中定义并由 __init__.py 或 graph.py 管理。
 # 这里的函数可能需要动态导入以避免循环依赖。
 
+THREAD_PREFIX_TEMPLATE = "user:{user_id}:conversation:"
+
+def make_user_thread_id(user_id: str, conversation_id: str) -> str:
+    """Build the LangGraph thread id used to isolate planner state per user."""
+    return f"{THREAD_PREFIX_TEMPLATE.format(user_id=user_id)}{conversation_id}"
+
 async def get_planner_graph():
     from . import graph
     if graph.planner_graph is None:
@@ -198,7 +204,7 @@ async def delete_planner_session(conversation_id: str):
     except Exception as e:
         print(f"[Planner Memory] ❌ 删除会话失败: {e}")
 
-async def get_all_sessions() -> List[dict]:
+async def get_all_sessions(thread_prefix: Optional[str] = None) -> List[dict]:
     """
     从数据库中提取所有已存在的会话列表。
     """
@@ -219,6 +225,8 @@ async def get_all_sessions() -> List[dict]:
                 rows = await cursor.fetchall()
                 for row in rows:
                     thread_id = row[0]
+                    if thread_prefix and not thread_id.startswith(thread_prefix):
+                        continue
                     title = "新对话"
                     timestamp = None
                     try:
@@ -257,7 +265,7 @@ async def get_all_sessions() -> List[dict]:
                         pass
                     
                     sessions.append({
-                        "id": thread_id,
+                        "id": thread_id[len(thread_prefix):] if thread_prefix else thread_id,
                         "title": title,
                         "updated_at": timestamp
                     })
