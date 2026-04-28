@@ -89,12 +89,12 @@ docs/
 .agent/skills/*/
 !.agent/skills/ecommerce-image-gen/
 !.agent/skills/openclaw-for-magnes/
+!.agent/skills/xiaohongshu-skills/
 .agent/skills/openclaw-for-magnes/data/
 # 排除其他可能包含敏感数据的技能
 .agent/skills/prompt-optimizer/
 .agent/skills/skill-creator/
 .agent/skills/web-ui-design/
-.agent/skills/xiaohongshu-skills/
 
 # ─── Claude Code 工作目录 ──────────────────────────────────
 .claude/
