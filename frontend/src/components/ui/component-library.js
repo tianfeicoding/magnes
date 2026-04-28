@@ -27,8 +27,8 @@
             category: '输入与采集',
             nodes: [
                 { type: 'rednote-content', label: '内容输入', icon: 'Edit3', fallback: 'TXT' },
-                { type: 'input-image', label: '图片输入', icon: 'Image', fallback: 'IMG' },
-                { type: 'text-node', label: '文字节点', icon: 'FileText', fallback: 'T' }
+                { type: 'input-image', label: '图片输入', icon: 'Image', fallback: 'IMG' }
+                // { type: 'text-node', label: '文字节点', icon: 'FileText', fallback: 'T' }
             ]
         },
         {
@@ -52,8 +52,8 @@
         {
             category: '预览与展示',
             nodes: [
-                { type: 'preview', label: '预览窗口', icon: 'MonitorPlay', fallback: 'OUT' },
-                { type: 'rednote-preview', label: '预览发布', icon: 'MonitorPlay', fallback: 'PUB' }
+                { type: 'preview', label: '预览窗口', icon: 'MonitorPlay', fallback: 'OUT' }
+                // { type: 'rednote-preview', label: '预览发布', icon: 'MonitorPlay', fallback: 'PUB' }
             ]
         }
     ];
@@ -88,9 +88,11 @@
             <div className={`w-[180px] bg-white border-r border-black h-full overflow-y-auto p-4 flex flex-col shrink-0
                            ${theme === 'dark' ? 'dark:bg-black dark:border-white' : ''}`}>
                 <div className="mb-8">
-                    <h2 className={`text-xl font-bold uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
-                        组件库
-                    </h2>
+                    {false && (
+                        <h2 className={`text-xl font-bold uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
+                            组件库
+                        </h2>
+                    )}
                 </div>
 
                 <div className="flex-1">

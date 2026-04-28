@@ -38,7 +38,7 @@
         const tools = [
             { type: 'rednote-content', icon: Edit3, label: '内容输入', permission: 'public' },
             { type: 'input-image', icon: Image, label: '图片输入', permission: 'public' },
-            { type: 'text-node', icon: Type, label: '文字节点', permission: 'public' },
+            // { type: 'text-node', icon: Type, label: '文字节点', permission: 'public' },
             { type: 'separator', label: 'AI' },
             { type: 'refiner', icon: Bot, label: '视觉分析', permission: 'public' },
             { type: 'layer-split', icon: Layers, label: '图层切片', permission: 'public' },
@@ -47,7 +47,7 @@
             { type: 'fine-tune', icon: Sliders, label: '精细编辑', permission: 'public' },
             { type: 'group-separator', label: '演示与发布', color: 'red' },
             { type: 'preview', icon: MonitorPlay, label: '预览窗口', permission: 'public' },
-            { type: 'rednote-preview', icon: Rocket, label: '预览发布', permission: 'public' },
+            // { type: 'rednote-preview', icon: Rocket, label: '预览发布', permission: 'public' },
         ];
 
         return (
