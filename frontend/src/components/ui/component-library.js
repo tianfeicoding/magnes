@@ -87,13 +87,13 @@
         return (
             <div className={`w-[180px] bg-white border-r border-black h-full overflow-y-auto p-4 flex flex-col shrink-0
                            ${theme === 'dark' ? 'dark:bg-black dark:border-white' : ''}`}>
-                <div className="mb-8">
-                    {false && (
+                {false && (
+                    <div className="mb-8">
                         <h2 className={`text-xl font-bold uppercase tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-black'}`}>
                             组件库
                         </h2>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <div className="flex-1">
                     {nodeLibrary.map((category, idx) => (
