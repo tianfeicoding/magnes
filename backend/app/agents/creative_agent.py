@@ -41,6 +41,7 @@ async def _execute_ingest_urls(state: PlannerState, decision: dict):
 
 async def _execute_xhs_search(state: PlannerState, decision: dict):
     from app.services.xhs_service import search_xhs_livesearch
+    print(f"[CreativeAgent] 🚪 进入 _execute_xhs_search, decision_action={decision.get('action')}")
     query = decision.get("parameters", {}).get("prompt") or ""
     if not query:
         for msg in reversed(state.get("messages", [])):
@@ -49,12 +50,27 @@ async def _execute_xhs_search(state: PlannerState, decision: dict):
                 break
 
     user_id = (state.get("extra_context") or {}).get("user_id")
+    print(f"[CreativeAgent] 🔎 准备执行小红书搜索: query='{query}', user_id={user_id}")
     res = await search_xhs_livesearch(query, user_id=user_id)
+    print(f"[CreativeAgent] 📦 小红书搜索返回: status={res.get('status')}, keys={list(res.keys())}")
     if res.get("status") == "success":
         search_results = res.get("results") or []
         summary = res.get("summary") or "已抓取最新内容并存入灵感库。"
         message_content = json.dumps({"thought": decision.get("thought", "实时搜索小红书内容。"), "action": "run_xhs_search", "reply": summary, "results": search_results, "refresh_rag": True}, ensure_ascii=False)
         return {"final_decision": {**decision, "reply": summary, "results": search_results, "refresh_rag": True}, "messages": [AIMessage(content=message_content)]}
+    if res.get("status") == "precheck_failed":
+        precheck = res.get("precheck") or {}
+        reply = precheck.get("message") or res.get("message") or "小红书环境预检未通过。"
+        message_content = json.dumps({
+            "thought": decision.get("thought", "先检查小红书环境是否可用。"),
+            "action": "run_xhs_search",
+            "reply": reply,
+            "xhs_precheck_failed": precheck
+        }, ensure_ascii=False)
+        return {
+            "final_decision": {**decision, "reply": reply, "xhs_precheck_failed": precheck},
+            "messages": [AIMessage(content=message_content)]
+        }
     else:
         return {"final_decision": {**decision, "reply": "搜索失败"}, "messages": [AIMessage(content="搜索失败")]}
 
@@ -176,6 +192,7 @@ async def call_creative_model(state: PlannerState):
     """灵感创意与文案排版中枢节点"""
     decision = state.get("final_decision", {})
     action = decision.get("action")
+    print(f"[CreativeAgent] 🧭 call_creative_model 路由开始: action={action}")
     
     # 按照 Action 进行专精纯工具或纯大模型拦截执行
     if action == "run_ingest_urls":

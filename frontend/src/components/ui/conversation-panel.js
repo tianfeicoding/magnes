@@ -1081,6 +1081,13 @@
                             } else if (event.type === 'refresh_rag') {
                                 console.log('[ConversationPanel] 🔄 收到后端刷新 RAG 指令');
                                 window.dispatchEvent(new CustomEvent('magnes:refresh_knowledge_base'));
+                            } else if (event.type === 'xhs_document_added') {
+                                console.log('[ConversationPanel] 📥 收到增量小红书入库结果:', event.document);
+                                window.dispatchEvent(new CustomEvent('magnes:refresh_knowledge_base'));
+                            } else if (event.type === 'xhs_precheck_failed') {
+                                window.dispatchEvent(new CustomEvent('magnes:open_xhs_precheck_modal', {
+                                    detail: event.payload || {}
+                                }));
                             } else if (event.type === 'done') {
                                 setMessages(prev => prev.map(m =>
                                     m.id === currentAiMsgId ? { ...m, isGenerating: false } : m

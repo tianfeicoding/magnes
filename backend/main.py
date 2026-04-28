@@ -15,15 +15,43 @@ import logging
 # [日志优化] 过滤掉前端静态 JS 文件的 200 OK 正常访问日志
 class JSLogFilter(logging.Filter):
     def filter(self, record):
-        msg = record.getMessage()
-        # 屏蔽路径列表：匹配成功的静态资源或已知可忽略的请求路径
-        is_static_path = any(p in msg for p in ["/js/", "/src/", "/core/", "/research/", "/css/", "/skills_assets/", "/uploads/", "/.well-known/", "/sm/"])
-        # 覆盖常见静态文件后缀 (忽略大小写)
-        is_static_ext = any(ext in msg.lower() for ext in [".js", ".css", ".map", ".jpg", ".jpeg", ".png", ".svg", ".gif", ".ico", ".woff", ".woff2"])
-        
-        # 同时过滤 200 OK 和 404 Not Found (这些对静态资源和 Source Maps 来说通常是噪音)
-        is_ignored_status = any(s in msg for s in [" 200 ", " 404 "])
-        
+        static_prefixes = (
+            "/js/",
+            "/src/",
+            "/core/",
+            "/research/",
+            "/css/",
+            "/skills_assets/",
+            "/uploads/",
+            "/.well-known/",
+            "/fonts/",
+            "/sm/",
+        )
+        static_exts = (".js", ".css", ".map", ".jpg", ".jpeg", ".png", ".svg", ".gif", ".ico", ".woff", ".woff2")
+
+        path = ""
+        status_code = None
+
+        # uvicorn.access 通常会把结构化参数放在 record.args:
+        # (client_addr, method, full_path, http_version, status_code)
+        if isinstance(getattr(record, "args", None), tuple) and len(record.args) >= 5:
+            path = str(record.args[2] or "")
+            status_code = str(record.args[4] or "")
+        else:
+            msg = record.getMessage()
+            path = msg
+            if " 200 " in msg:
+                status_code = "200"
+            elif " 304 " in msg:
+                status_code = "304"
+            elif " 404 " in msg:
+                status_code = "404"
+
+        path_lower = path.lower()
+        is_static_path = any(prefix in path for prefix in static_prefixes)
+        is_static_ext = any(path_lower.endswith(ext) or ext in path_lower for ext in static_exts)
+        is_ignored_status = status_code in {"200", "304", "404"}
+
         if (is_static_path or is_static_ext) and is_ignored_status:
             return False
         return True

@@ -37,13 +37,6 @@
             <div className="h-16 bg-white border-b border-black flex items-center px-6 justify-between shrink-0 z-[100] relative">
                 <div className="flex items-center gap-3">
                     <h1 className="font-bold text-2xl text-black tracking-tighter">Magnes</h1>
-
-                    {/* 当前项目名称（仅展示） */}
-                    {isLoggedIn && (
-                        <span className="text-[12px] text-zinc-400 font-bold max-w-[120px] truncate">
-                            {projectName || '未命名项目'}
-                        </span>
-                    )}
                 </div>
 
                 {/* 中央 Tab 切换区域 */}

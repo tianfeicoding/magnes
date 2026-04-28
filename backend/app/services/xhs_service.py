@@ -6,16 +6,30 @@ from app.rag.image_service import image_service
 from app.rag.models.note_document import NoteDocument
 from app.rag.vectorstore.chroma_store import upsert_document
 from app.rag.retrieval.bm25_retriever import get_bm25_index
+from app.services.xhs_progress import publish_xhs_progress
 
 async def search_xhs_livesearch(prompt: str, limit: int = 10, user_id: str = None) -> Dict[str, Any]:
     """
     通用小红书实时搜索服务：通过 MCP 搜索、抓取详情并同步到灵感库。
     """
     print(f"\n[XHS Service] 🔎 执行实时搜索: prompt='{prompt}', limit={limit}")
+    print(f"[XHS Service] 👤 user_id={user_id}")
     
     try:
+        precheck = await XHSMCPTools.precheck_xhs_environment()
+        print(f"[XHS Service] 🩺 预检结果: ok={precheck.get('ok')}, code={precheck.get('code')}")
+        if not precheck.get("ok"):
+            print(f"[XHS Service] ⚠️ 环境预检失败: {precheck.get('code')}")
+            return {
+                "status": "precheck_failed",
+                "message": precheck.get("message") or "小红书环境预检失败",
+                "precheck": precheck,
+            }
+
         # 1. 调用 MCP 搜索工具
+        print("[XHS Service] 🚀 开始调用 XHSMCPTools.search_feeds")
         res = await XHSMCPTools.search_feeds(prompt)
+        print(f"[XHS Service] 📥 search_feeds 返回类型: {type(res).__name__}")
         
         if not res or (isinstance(res, dict) and "error" in res):
             error_msg = res.get("error") if isinstance(res, dict) else "搜索返回空结果"
@@ -92,8 +106,8 @@ async def search_xhs_livesearch(prompt: str, limit: int = 10, user_id: str = Non
                             break
             return note_data
 
-        # 限制并发数为 3，避免触发风控
-        semaphore = asyncio.Semaphore(3)
+        # 详情抓取对浏览器状态较敏感，降低并发避免多个详情页相互干扰
+        semaphore = asyncio.Semaphore(1)
 
         async def enrich_with_limit(note_data):
             async with semaphore:
@@ -145,11 +159,17 @@ async def search_xhs_livesearch(prompt: str, limit: int = 10, user_id: str = Non
                 doc.style_tags.append(f"xsec_token:{note.get('xsec_token')}")
             
             await upsert_document(doc, user_id=user_id)
-            processed_docs.append({
+            doc_payload = {
                 "id": doc.id,
                 "title": doc.title,
                 "content": doc.content,
                 "image_url": doc.image_url
+            }
+            processed_docs.append(doc_payload)
+            publish_xhs_progress({
+                "type": "xhs_document_added",
+                "document": doc_payload,
+                "refresh_rag": True,
             })
 
         if processed_docs:

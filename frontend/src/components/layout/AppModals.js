@@ -47,6 +47,9 @@
         sourceDocIds,
         activeSourceMap,
         sourceContent,
+        xhsPrecheckModalOpen,
+        setXhsPrecheckModalOpen,
+        xhsPrecheckInfo,
         // 通知状态
         toastMsg,
         toastType,
@@ -341,6 +344,54 @@
             return renderMemoryMd();
         };
 
+        const renderXhsPrecheckModal = () => {
+            const steps = Array.isArray(xhsPrecheckInfo?.instructions) ? xhsPrecheckInfo.instructions : [];
+            const showQr = !!xhsPrecheckInfo?.qrcode_image_url;
+            return h(Modal, {
+                isOpen: xhsPrecheckModalOpen,
+                onClose: () => setXhsPrecheckModalOpen(false),
+                title: xhsPrecheckInfo?.title || '小红书环境检查未通过',
+                theme: 'light'
+            }, h('div', { className: 'p-6 space-y-5 text-zinc-900' }, [
+                h('div', { key: 'summary', className: 'space-y-2' }, [
+                    h('p', { className: 'text-[13px] leading-relaxed font-medium' }, xhsPrecheckInfo?.message || '当前无法执行小红书搜索。'),
+                    xhsPrecheckInfo?.detail && h('p', { className: 'text-[11px] leading-relaxed text-zinc-500 border border-zinc-200 bg-zinc-50 px-3 py-2' }, xhsPrecheckInfo.detail)
+                ]),
+                steps.length > 0 && h('div', { key: 'steps', className: 'space-y-2' }, [
+                    h('div', { className: 'text-[11px] font-bold uppercase tracking-wider text-zinc-500' }, '操作步骤'),
+                    h('ol', { className: 'space-y-2' },
+                        steps.map((step, index) => h('li', {
+                            key: `xhs-step-${index}`,
+                            className: 'flex items-start gap-3 text-[12px] leading-relaxed'
+                        }, [
+                            h('span', { className: 'shrink-0 w-5 h-5 border border-black flex items-center justify-center text-[10px] font-bold' }, index + 1),
+                            h('span', null, step)
+                        ]))
+                    )
+                ]),
+                showQr && h('div', { key: 'qr', className: 'space-y-3 border border-zinc-200 bg-zinc-50 p-4' }, [
+                    h('div', { className: 'text-[11px] font-bold uppercase tracking-wider text-zinc-500' }, '登录二维码'),
+                    h('img', {
+                        src: xhsPrecheckInfo.qrcode_image_url,
+                        alt: '小红书登录二维码',
+                        className: 'w-48 h-48 object-contain border border-zinc-200 bg-white'
+                    }),
+                    xhsPrecheckInfo?.qr_login_url && h('a', {
+                        href: xhsPrecheckInfo.qr_login_url,
+                        target: '_blank',
+                        rel: 'noreferrer',
+                        className: 'text-[12px] text-blue-600 underline break-all'
+                    }, xhsPrecheckInfo.qr_login_url)
+                ]),
+                h('div', { key: 'actions', className: 'flex justify-end pt-1' }, [
+                    h('button', {
+                        onClick: () => setXhsPrecheckModalOpen(false),
+                        className: 'px-4 py-2 text-[11px] font-bold border border-black hover:bg-black hover:text-white transition-all duration-200 uppercase'
+                    }, '我知道了')
+                ])
+            ]));
+        };
+
         return (
             h(React.Fragment, null, [
                 // 1. 草稿编辑/查看弹窗
@@ -401,7 +452,10 @@
                     toast
                 }),
 
-                // 5. 全局 Toast 通知
+                // 5. 小红书环境预检失败弹窗
+                xhsPrecheckModalOpen && renderXhsPrecheckModal(),
+
+                // 6. 全局 Toast 通知
                 toastMsg && h(Toast, {
                     message: toastMsg,
                     type: toastType,
@@ -409,7 +463,7 @@
                     onDone: () => setToastMsg('')
                 }),
 
-                // 5. 登录/注册弹窗
+                // 7. 登录/注册弹窗
                 loginModalOpen && LoginModal && h(LoginModal, {
                     isOpen: loginModalOpen,
                     onClose: () => setLoginModalOpen(false),
@@ -417,7 +471,7 @@
                     requireApiKey: true
                 }),
 
-                // 6. 设置弹窗（Tab 化）
+                // 8. 设置弹窗（Tab 化）
                 h(Modal, {
                     isOpen: settingsOpen,
                     onClose: () => setSettingsOpen(false),

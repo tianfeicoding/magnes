@@ -186,6 +186,7 @@
                     minZoom={0.2}
                     maxZoom={4}
                     defaultViewport={{ x: 140, y: 80, zoom: 0.75 }}
+                    proOptions={{ hideAttribution: true }}
                 >
                     <Background gap={20} size={1} color={theme === 'dark' ? '#333' : '#cbd5e1'} />
                     <Controls />
@@ -292,6 +293,8 @@
         const [sourceDocIds, setSourceDocIds] = useState([]);
         const [activeSourceMap, setActiveSourceMap] = useState({});
         const [sourceContent, setSourceContent] = useState('');
+        const [xhsPrecheckModalOpen, setXhsPrecheckModalOpen] = useState(false);
+        const [xhsPrecheckInfo, setXhsPrecheckInfo] = useState(null);
 
         const toast = useCallback((msg, type = '', persistent = false) => {
             setToastMsg(msg); setToastType(type); setToastPersistent(persistent);
@@ -481,6 +484,15 @@
             window.addEventListener('magnes:open_settings', handleOpenSettings);
             return () => window.removeEventListener('magnes:open_settings', handleOpenSettings);
         }, [toast]);
+
+        useEffect(() => {
+            const handleOpenXhsPrecheckModal = (e) => {
+                setXhsPrecheckInfo(e.detail || null);
+                setXhsPrecheckModalOpen(true);
+            };
+            window.addEventListener('magnes:open_xhs_precheck_modal', handleOpenXhsPrecheckModal);
+            return () => window.removeEventListener('magnes:open_xhs_precheck_modal', handleOpenXhsPrecheckModal);
+        }, []);
 
         // 定时同步会话 ID 到存储，并触发历史消息加载
         useEffect(() => {
@@ -844,6 +856,9 @@
                     sourceDocIds={sourceDocIds}
                     activeSourceMap={activeSourceMap}
                     sourceContent={sourceContent}
+                    xhsPrecheckModalOpen={xhsPrecheckModalOpen}
+                    setXhsPrecheckModalOpen={setXhsPrecheckModalOpen}
+                    xhsPrecheckInfo={xhsPrecheckInfo}
                     toastMsg={toastMsg}
                     toastType={toastType}
                     toastPersistent={toastPersistent}
