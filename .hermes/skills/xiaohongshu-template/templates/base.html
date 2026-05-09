@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=ZCOOL+KuaiLe&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #e8e0d4;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 20px;
+  font-family: 'Noto Sans SC', sans-serif;
+}
+
+.card {
+  width: 375px;
+  height: 500px;
+  background: #F5F0E6;
+  border-radius: 0;
+  padding: 20px 16px 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(74, 69, 64, 0.12);
+}
+
+/* 纸张纹理 */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 装饰元素 - 可替换为任意emoji */
+.deco-bread { position: absolute; top: 8px; right: 12px; font-size: 24px; opacity: 0.6; z-index: 1; }
+.deco-coffee { position: absolute; top: 50px; left: 10px; font-size: 18px; opacity: 0.5; z-index: 1; }
+.deco-star1 { position: absolute; top: 85px; right: 25px; font-size: 12px; opacity: 0.4; z-index: 1; }
+.deco-cloud { position: absolute; bottom: 60px; left: 8px; font-size: 16px; opacity: 0.35; z-index: 1; }
+.deco-star2 { position: absolute; bottom: 100px; right: 15px; font-size: 14px; opacity: 0.4; z-index: 1; }
+
+/* Washi tape 装饰 */
+.washi-tape {
+  position: absolute;
+  width: 60px;
+  height: 18px;
+  background: repeating-linear-gradient(
+    45deg,
+    #D4956A,
+    #D4956A 4px,
+    #F5E6C8 4px,
+    #F5E6C8 8px
+  );
+  opacity: 0.7;
+  border-radius: 2px;
+  z-index: 2;
+}
+.washi-1 { top: 14px; left: -8px; transform: rotate(-12deg); }
+.washi-2 { top: 160px; right: -6px; transform: rotate(8deg); width: 45px; }
+.washi-3 { top: 320px; left: -4px; transform: rotate(-6deg); width: 50px; }
+
+/* 标题区 */
+.header {
+  text-align: center;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 2;
+}
+
+.main-title {
+  font-family: 'ZCOOL KuaiLe', cursive;
+  font-size: 22px;
+  color: #4A4540;
+  letter-spacing: 2px;
+  line-height: 1.2;
+  text-shadow: 2px 2px 0px rgba(123, 163, 168, 0.2);
+}
+
+.sub-title {
+  font-size: 11px;
+  color: #7BA3A8;
+  margin-top: 3px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+/* 分隔线 */
+.divider {
+  width: 100%;
+  height: 3px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='4' viewBox='0 0 20 4'%3E%3Cpath d='M0 2 Q5 0, 10 2 T20 2' stroke='%237BA3A8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;
+  margin: 8px 0;
+  opacity: 0.6;
+}
+
+/* 活动卡片 */
+.event-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 10px 8px;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 2;
+  border: 2px solid rgba(123, 163, 168, 0.25);
+  box-shadow: 3px 3px 0px rgba(123, 163, 168, 0.15);
+}
+
+/* 手绘边框效果 */
+.event-card::after {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px; right: -2px; bottom: -2px;
+  border-radius: 18px;
+  border: 1px dashed rgba(212, 149, 106, 0.3);
+  pointer-events: none;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.card-icon {
+  width: 24px;
+  height: 24px;
+  background: #7BA3A8;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4A4540;
+  line-height: 1.2;
+}
+
+.card-body {
+  padding-left: 4px;
+}
+
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: #5a5550;
+  line-height: 1.3;
+}
+
+.info-label {
+  color: #7BA3A8;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: 32px;
+}
+
+.info-value {
+  color: #4A4540;
+}
+
+.highlight-box {
+  background: rgba(212, 149, 106, 0.12);
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-top: 4px;
+  border-left: 3px solid #D4956A;
+}
+
+.highlight-text {
+  font-size: 11px;
+  color: #4A4540;
+  line-height: 1.3;
+}
+
+.highlight-num {
+  color: #D4956A;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* 免费标签 */
+.free-tag {
+  display: inline-block;
+  background: #7BA3A8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 20px;
+  margin-left: 3px;
+  letter-spacing: 1px;
+}
+
+/* 角落装饰小图 */
+.corner-deco {
+  position: absolute;
+  font-size: 14px;
+  opacity: 0.25;
+  z-index: 1;
+}
+.cd1 { bottom: 10px; left: 40px; }
+.cd2 { top: 200px; right: 10px; }
+.cd3 { top: 350px; left: 6px; }
+.cd4 { bottom: 150px; right: 10px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <!-- 装饰元素 - 替换为与主题相关的emoji -->
+  <div class="deco-bread">{{DECO_1}}</div>
+  <div class="deco-coffee">{{DECO_2}}</div>
+  <div class="deco-star1">{{DECO_3}}</div>
+  <div class="deco-cloud">{{DECO_4}}</div>
+  <div class="deco-star2">{{DECO_5}}</div>
+
+  <!-- Washi tape -->
+  <div class="washi-tape washi-1"></div>
+  <div class="washi-tape washi-2"></div>
+  <div class="washi-tape washi-3"></div>
+
+  <!-- 角落装饰 - 替换为与主题相关的emoji -->
+  <div class="corner-deco cd1">{{CORNER_1}}</div>
+  <div class="corner-deco cd2">{{CORNER_2}}</div>
+  <div class="corner-deco cd3">{{CORNER_3}}</div>
+  <div class="corner-deco cd4">{{CORNER_4}}</div>
+
+  <!-- 标题 -->
+  <div class="header">
+    <h1 class="main-title">{{TITLE}}</h1>
+    <p class="sub-title">{{SUBTITLE}}</p>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 条目卡片 - 复制此块增加条目 -->
+  <div class="event-card">
+    <div class="card-header">
+      <div class="card-icon">{{ITEM_1_ICON}}</div>
+      <div class="card-title">{{ITEM_1_NAME}}</div>
+    </div>
+    <div class="card-body">
+      <div class="info-row">
+        <span class="info-label">时间</span>
+        <span class="info-value">{{ITEM_1_TIME}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">地点</span>
+        <span class="info-value">{{ITEM_1_LOCATION}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">门票</span>
+        <span class="info-value"><span class="free-tag">{{ITEM_1_PRICE}}</span></span>
+      </div>
+      <div class="highlight-box">
+        <div class="highlight-text">
+          <span class="highlight-num">{{ITEM_1_HIGHLIGHT_NUM}}</span> {{ITEM_1_HIGHLIGHT_TEXT}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 条目2 -->
+  <div class="event-card">
+    <div class="card-header">
+      <div class="card-icon">{{ITEM_2_ICON}}</div>
+      <div class="card-title">{{ITEM_2_NAME}}</div>
+    </div>
+    <div class="card-body">
+      <div class="info-row">
+        <span class="info-label">时间</span>
+        <span class="info-value">{{ITEM_2_TIME}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">地点</span>
+        <span class="info-value">{{ITEM_2_LOCATION}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">门票</span>
+        <span class="info-value"><span class="free-tag">{{ITEM_2_PRICE}}</span></span>
+      </div>
+      <div class="highlight-box">
+        <div class="highlight-text">
+          <span class="highlight-num">{{ITEM_2_HIGHLIGHT_NUM}}</span> {{ITEM_2_HIGHLIGHT_TEXT}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 条目3 -->
+  <div class="event-card">
+    <div class="card-header">
+      <div class="card-icon">{{ITEM_3_ICON}}</div>
+      <div class="card-title">{{ITEM_3_NAME}}</div>
+    </div>
+    <div class="card-body">
+      <div class="info-row">
+        <span class="info-label">时间</span>
+        <span class="info-value">{{ITEM_3_TIME}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">地点</span>
+        <span class="info-value">{{ITEM_3_LOCATION}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">门票</span>
+        <span class="info-value"><span class="free-tag">{{ITEM_3_PRICE}}</span></span>
+      </div>
+      <div class="highlight-box">
+        <div class="highlight-text">
+          {{ITEM_3_HIGHLIGHT_TEXT}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

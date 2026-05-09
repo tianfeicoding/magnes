@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rednote Nodes 测试中心</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 0 0 10px 0;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+            margin: 0;
+        }
+
+        .section-title {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 40px 0 20px 0;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .test-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .test-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .test-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+
+        .test-card.primary::before {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .test-card.ai::before {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .test-card .icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .test-card h2 {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        .test-card .badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .test-card .badge.ai {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .test-card .description {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .test-card .features {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+        }
+
+        .test-card .features li {
+            font-size: 13px;
+            color: #555;
+            padding: 5px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .test-card .features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .test-card .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .test-card .button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .info-section {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .info-section h3 {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+
+        .info-section p {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.8;
+            margin: 0 0 10px 0;
+        }
+
+        .architecture-diagram {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #333;
+            margin-top: 15px;
+            line-height: 1.8;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎨 Rednote Nodes 测试中心</h1>
+            <p>完整的节点测试套件 - 内容输入、风格实验室、预览节点</p>
+        </div>
+
+        <!-- 基础节点测试 -->
+        <div class="section-title">📦 基础节点测试</div>
+        <div class="cards-grid">
+            <!-- Content Node -->
+            <div class="test-card primary" onclick="window.open('test-content-node.html', '_blank')">
+                <div class="icon">✍️</div>
+                <div class="badge">基础节点</div>
+                <h2>Content Node</h2>
+                <div class="description">
+                    内容输入节点测试套件，测试文本解析、图片上传和排序功能
+                </div>
+                <ul class="features">
+                    <li>多行文本自动解析</li>
+                    <li>图片上传和预览</li>
+                    <li>图片拖拽排序</li>
+                    <li>实时数据输出</li>
+                    <li>6 个测试场景</li>
+                </ul>
+                <a href="test-content-node.html" class="button" onclick="event.stopPropagation()">
+                    打开测试 →
+                </a>
+            </div>
+
+            <!-- StyleLab Node -->
+            <div class="test-card primary" onclick="window.open('test-stylelab-node.html', '_blank')">
+                <div class="icon">✨</div>
+                <div class="badge">基础节点</div>
+                <h2>StyleLab Node</h2>
+                <div class="description">
+                    风格实验室节点测试套件，测试智能配色、AI 生成和收藏库功能
+                </div>
+                <ul class="features">
+                    <li>智能吸色（单图模式）</li>
+                    <li>AI 配色（多图模式）</li>
+                    <li>5 种预设风格</li>
+                    <li>AI 魔法生成</li>
+                    <li>本地收藏库</li>
+                    <li>7 个测试场景</li>
+                </ul>
+                <a href="test-stylelab-node.html" class="button" onclick="event.stopPropagation()">
+                    打开测试 →
+                </a>
+            </div>
+
+            <!-- Preview Node -->
+            <div class="test-card primary" onclick="window.open('test-preview-node.html', '_blank')">
+                <div class="icon">📱</div>
+                <div class="badge">基础节点</div>
+                <h2>Preview Node</h2>
+                <div class="description">
+                    预览节点测试套件，测试手机界面模拟、模板渲染和交互功能
+                </div>
+                <ul class="features">
+                    <li>iPhone 尺寸模拟</li>
+                    <li>票根/市集模板</li>
+                    <li>完整 UI 界面</li>
+                    <li>滚动交互效果</li>
+                    <li>6 个测试场景</li>
+                </ul>
+                <a href="test-preview-node.html" class="button" onclick="event.stopPropagation()">
+                    打开测试 →
+                </a>
+            </div>
+        </div>
+
+        <!-- Architecture Info -->
+        <div class="info-section">
+            <h3>📋 节点架构说明</h3>
+            <p>
+                Rednote 模块采用三节点架构，每个节点负责不同的功能：
+            </p>
+            <div class="architecture-diagram">
+                ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+                │ Content Node │ ───▶ │ StyleLab Node │ ───▶ │ Preview Node │
+                │ 内容输入节点 │ │ 风格实验室 │ │ 预览节点 │
+                └─────────────────┘ └─────────────────┘ └─────────────────┘
+                │ │ │
+                ▼ ▼ ▼
+                文本 + 图片 风格配置 + 模板 小红书界面预览
+                + AI 功能
+            </div>
+            <p style="margin-top: 15px;">
+                <strong>工作流程：</strong><br>
+                1. <strong>Content Node</strong> 接收用户输入的文本和图片<br>
+                2. <strong>StyleLab Node</strong> 应用风格配置和选择模板<br>
+                3. <strong>Preview Node</strong> 在手机界面中预览最终效果<br>
+                4. <strong>AI 功能</strong> 提供智能换背景、智能排版和智能配色
+            </p>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="info-section">
+            <h3>🔗 快速链接</h3>
+            <p>
+                <strong>源代码位置：</strong> <code>/src/nodes/rednote/</code><br>
+                <strong>文档位置：</strong> <code>/src/nodes/rednote/docs/</code><br>
+                <strong>主应用：</strong> <a href="../../../../../index.html"
+                    style="color: #667eea; text-decoration: none;">Magnes Studio (Index)</a>
+            </p>
+            <p style="margin-top: 15px;">
+                <strong>所有测试文件：</strong><br>
+                <strong>基础节点：</strong><br>
+                • <a href="test-content-node.html"
+                    style="color: #667eea; text-decoration: none;">test-content-node.html</a><br>
+                • <a href="test-stylelab-node.html"
+                    style="color: #667eea; text-decoration: none;">test-stylelab-node.html</a><br>
+                • <a href="test-preview-node.html"
+                    style="color: #667eea; text-decoration: none;">test-preview-node.html</a><br>
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Rednote Nodes Test Suite v2.0 | 2025-12-23</p>
+            <p>Built with React 18 + Tailwind CSS + AI Integration</p>
+        </div>
+    </div>
+
+    <script>
+        // 添加键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            // 基础节点
+            if (e.key === '1') window.open('test-content-node.html', '_blank');
+            if (e.key === '2') window.open('test-stylelab-node.html', '_blank');
+            if (e.key === '3') window.open('test-preview-node.html', '_blank');
+
+            // AI 功能
+            if (e.key === '4') window.open('test-preview-ai-integration.html', '_blank');
+            if (e.key === '5') window.open('test-preview-ai-real-api.html', '_blank');
+            if (e.key === '6') window.open('test-smart-layout-preview.html', '_blank');
+            if (e.key === '7') window.open('test-smart-color.html', '_blank');
+        });
+
+        console.log('🚀 Rednote Nodes Test Center V2.0 Loaded');
+        console.log('💡 Keyboard Shortcuts:');
+        console.log('  基础节点:');
+        console.log('    Press 1 - Content Node Test');
+        console.log('    Press 2 - StyleLab Node Test');
+        console.log('    Press 3 - Preview Node Test');
+        console.log('  AI 功能:');
+        console.log('    Press 4 - AI Integration Test (Mock)');
+        console.log('    Press 5 - AI Real API Test');
+        console.log('    Press 6 - Smart Layout Preview');
+        console.log('    Press 7 - Smart Color Test');
+    </script>
+</body>
+
+</html>

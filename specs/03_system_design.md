@@ -1,0 +1,877 @@
+# Magnes Studio - 系统设计文档
+
+## 1. 架构目标
+
+- 提供清晰的分层结构，支持多智能体协同、外部 AI API 集成以及前后端协作。
+- 保证在私有化环境中的可扩展性、可观测性和部署可移植性。
+- 前端零依赖运行时，降低部署门槛；后端 Agent 可独立扩展，不影响整体稳定性。
+
+## 2. 总体架构
+
+```mermaid
+graph LR
+    subgraph 前端层["前端层 (Pure HTML + ReactFlow)"]
+        Canvas["可视化画布\n(ReactFlow)"]
+        ConvPanel["对话面板\n(Conversation Panel)"]
+        StyleLab["风格实验室\n(StyleLab Node)"]
+    end
+
+    subgraph API层["API 服务层 (FastAPI)"]
+        TaskAPI["/api/v1/tasks\n任务分发"]
+        DialogAPI["/api/v1/dialogue\n对话 SSE"]
+        RAGAPI["/api/v1/rag\nRAG 知识库"]
+        SkillAPI["/api/v1/skills\n技能库"]
+        TemplateAPI["/api/v1/templates\n模版管理"]
+        HistoryAPI["/api/v1/history\n生成历史"]
+        ExportAPI["/api/v1/export\n图片导出"]
+        MCPAPI["/api/v1/mcp\nMCP 工具"]
+    end
+
+    subgraph AgentLayer["智能体层 (LangGraph)"]
+        Planner["Planner 对话图\n意图解析"]
+        Designer["Designer 工作流\n内容生产"]
+        subgraph DesignerAgents["Designer Agents"]
+            Slicer["Slicer\n图层分析"]
+            Refiner["Refiner\n风格反推"]
+            Painter["Painter\n背景生图"]
+            Composer["Composer\n排版合成"]
+            Reviewer["Reviewer\n美学审核"]
+        end
+        subgraph PlannerAgents["Planner Agents"]
+            CopyWriter["CopyWriter\n文案生成"]
+            InspirationAnalyst["InspirationAnalyst\n灵感分析"]
+            KnowledgeAgent["KnowledgeAgent\n知识问答"]
+            SecurityCheck["SecurityCheck\n敏感词检测"]
+            Summarizer["Summarizer\n对话摘要"]
+        end
+    end
+
+    subgraph CoreLayer["核心服务层"]
+        LLMConfig["LLM 配置\n(llm_config.py)"]
+        MCPClient["MCP 客户端\n(mcp_client.py)"]
+        ImageGen["图片导出\n(Playwright)"]
+        StorageUtils["图片持久化\n(storage_utils.py)"]
+        SkillsLoader["技能加载器\n(skills_loader.py)"]
+        SkillRuntime["技能运行时\n(activeSkill + SKILL.md)"]
+    end
+
+    subgraph RAGLayer["RAG 层 (LlamaIndex + ChromaDB)"]
+        VectorStore["向量存储\n(ChromaDB)"]
+        BM25Index["BM25 索引"]
+        Ingestion["数据摄入\n(ingestion/)"]
+        Retrieval["混合检索\n(BM25 + 向量)"]
+    end
+
+    subgraph MemoryLayer["记忆层 (Memory)"]
+        SoulMd["Soul.md\n(长期偏好)"]
+        MemoryMd["MEMORY.md\n(中期记忆)"]
+        ConvSummary["ConversationSummary\n(短期压缩)"]
+        MemoryEvent["MemoryEvent / TaskTrace\n(行为事件)"]
+        UserMem["UserMemory\n(结构化记忆)"]
+    end
+
+    subgraph Storage["持久化层"]
+        SQLite["SQLite\n(templates + history + memories)"]
+        LocalFS["本地文件系统\n(图片、向量库)"]
+    end
+
+    subgraph ExternalAPIs["外部 AI 服务"]
+        NanoBanana["Nano-Banana 2生图"]
+        QwenVision["Qwen 视觉模型\n图层分析"]
+        OpenAILLM["OpenAI 兼容 LLM\n文案/规划"]
+    end
+
+    Canvas --> TaskAPI
+    Canvas --> ExportAPI
+    ConvPanel --> DialogAPI
+    StyleLab --> TemplateAPI
+
+    TaskAPI --> Designer
+    DialogAPI --> Planner
+    RAGAPI --> RAGLayer
+    SkillAPI --> SkillRuntime
+    TemplateAPI --> SQLite
+    HistoryAPI --> SQLite
+    ExportAPI --> ImageGen
+    MCPAPI --> MCPClient
+
+    Planner --> MemoryLayer
+    Planner --> SkillRuntime
+    MemoryLayer --> SQLite
+    SkillRuntime --> SQLite
+
+    Planner --> PlannerAgents
+    Designer --> DesignerAgents
+
+    Painter --> NanoBanana
+    Painter --> DALLE3
+    Slicer --> QwenVision
+    Refiner --> QwenVision
+    CopyWriter --> OpenAILLM
+    Planner --> OpenAILLM
+
+    InspirationAnalyst --> Retrieval
+    KnowledgeAgent --> Retrieval
+    Retrieval --> VectorStore
+    Retrieval --> BM25Index
+    Ingestion --> VectorStore
+    Ingestion --> BM25Index
+
+    CoreLayer --> Storage
+    AgentLayer --> CoreLayer
+```
+
+
+### 2.5 项目持久化与操作日志架构
+
+```mermaid
+graph LR
+    subgraph ProjectLayer["项目持久化层 (Project Persistence)"]
+        ProjectAPI["/api/v1/projects
+项目 CRUD"]
+        SnapshotAPI["/api/v1/projects/{id}/snapshots
+快照管理"]
+        ActionLogAPI["/api/v1/projects/action-log
+操作日志"]
+        MemoryAPI["/api/v1/projects/analyze-memory
+记忆回流"]
+    end
+
+    subgraph Frontend["前端"]
+        AppCanvas["ReactFlow 画布"]
+        MyProjects["我的项目 Tab"]
+        AutoSave["自动保存\n(debounce 2s)"]
+    end
+
+    subgraph Storage2["SQLite 存储"]
+        ProjectsDB["projects 表\n(nodes/edges/viewport)"]
+        SnapshotsDB["project_snapshots 表"]
+        ActionLogsDB["canvas_action_logs 表"]
+        UserMemDB["user_memories 表"]
+    end
+
+    AppCanvas --> AutoSave
+    AutoSave --> ProjectAPI
+    MyProjects --> ProjectAPI
+    ProjectAPI --> ProjectsDB
+    SnapshotAPI --> SnapshotsDB
+    ActionLogAPI --> ActionLogsDB
+    MemoryAPI --> UserMemDB
+
+    AppCanvas -.->|关键操作| ActionLogAPI
+    AutoSave -.->|每5分钟| MemoryAPI
+```
+
+**核心设计**：
+- **Project 表**：独立存储画布快照（nodes, edges, viewport），与记忆系统解耦
+- **自动保存**：前端 `nodes`/`edges` 变化后 2 秒 debounce 触发 `PUT /projects/{id}`
+- **刷新恢复**：`GET /projects/last/active` 返回用户最后编辑的项目
+- **CanvasActionLog**：记录细粒度操作（节点创建/删除/连线、背景替换、导出等），支持语义检索
+- **记忆回流**：LLM 定期分析操作日志，提取偏好写入 `user_memories`
+
+## 3. 认证与安全架构
+
+### 3.1 用户认证系统
+
+基于 FastAPI-Users 实现 JWT Token 认证体系：
+
+```mermaid
+graph LR
+    subgraph 认证流程
+        Client[前端客户端]
+        Login[POST /auth/jwt/login]
+        Verify[验证用户名密码]
+        JWT[生成 JWT Token]
+        Response[返回 Token]
+        Client2[后续请求]
+        AuthHeader[Authorization: Bearer]
+        Validate[验证 Token]
+        Access[访问受保护资源]
+    end
+
+    Client --> Login
+    Login --> Verify
+    Verify --> JWT
+    JWT --> Response
+    Response --> Client
+    Client2 --> AuthHeader
+    AuthHeader --> Validate
+    Validate --> Access
+```
+
+**核心组件**：
+
+| 组件 | 文件路径 | 职责 |
+|------|----------|------|
+| User Model | `backend/app/models/user.py` | 用户数据模型（id, email, username, hashed_password） |
+| User Manager | `backend/app/core/users.py` | 用户管理逻辑（创建、验证、Token 生成） |
+| Auth Backend | `backend/app/core/users.py` | JWT 策略配置（密钥、过期时间） |
+| Auth Router | `backend/app/api/auth.py` | FastAPI-Users 默认路由（注册/登录/刷新） |
+| Auth Middleware | `backend/app/middleware/auth.py` | 请求鉴权中间件 |
+
+**Token 结构**：
+- Access Token: 15 分钟有效期
+- Refresh Token: 7 天有效期
+- 算法: HS256
+- 载荷包含: user_id, username, aud（受众）
+
+**接口鉴权等级**：
+
+| 路由 | 鉴权要求 |
+|------|----------|
+| `/api/v1/auth/*` | 公开（注册/登录） |
+| `/api/v1/public/*` | 公开（RAG 公共接口） |
+| `/api/v1/*` | 需 Bearer Token |
+
+### 3.2 安全中间件
+
+**AuthMiddleware** (`backend/app/middleware/auth.py`)：
+- 拦截所有 `/api/v1/*` 请求
+- 提取 `Authorization: Bearer <token>` Header
+- 验证 JWT Token 有效性
+- 将当前用户对象注入请求上下文
+- Token 无效时返回 403 Forbidden
+
+---
+
+## 4. 模块视图
+
+### 4.1 展示层（前端）
+
+**技术选型**：纯 HTML + React 18（CDN）+ ReactFlow + Tailwind CSS + Lucide Icons，Babel 仅用于 JSX 编译。
+
+**核心模块**：
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 主画布 | `frontend/src/app.js` | ReactFlow 初始化、节点注册、全局事件处理、键盘快捷键 |
+| 全局状态 | `frontend/src/context/app-context.js` | React Context，管理节点数据、API 配置、对话历史 |
+| 对话面板 | `frontend/src/components/ui/conversation-panel.js` | SSE 连接管理、消息渲染、对话历史展示 |
+| 节点组件 | `frontend/src/nodes/rf/` | 各类 ReactFlow 节点的 UI 渲染与交互逻辑 |
+| 小红书节点 | `frontend/src/nodes/rednote/` | ContentNode、PreviewNode、StyleLabNode 专属逻辑 |
+| 生成服务 | `frontend/src/services/generation-service.js` | 任务分发、轮询状态、结果处理 |
+| API 客户端 | `frontend/src/utils/api-client.js` | 通用 HTTP 请求封装（含 OpenAI 兼容调用、轮询逻辑） |
+| 节点工厂 | `frontend/src/utils/node-helpers.js` | 创建各类节点对象的工厂函数 |
+
+**交互模式**：
+- **工作流模式**：在 ReactFlow 画布上拖拽节点、连线，点击执行触发后端工作流。
+- **对话模式**：在对话面板输入自然语言，Planner 智能体解析意图并自动创建/调整节点。
+
+
+**精细编排节点（FineTune Node）**：
+
+| 功能模块 | 文件 | 职责 |
+|----------|------|------|
+| 主节点组件 | `frontend/src/nodes/rf/fine-tune-node-rf.js` | WYSIWYG 画布渲染、图层管理、历史栈管理 |
+| 属性面板 | 集成在主节点内 | 文字样式编辑（字号、字体、颜色、对齐）|
+
+**核心功能设计**：
+
+1. **WYSIWYG 画布**
+   - 基于绝对定位渲染图层（使用百分比坐标适配不同尺寸）
+   - 支持文字图层和图片图层的混合渲染
+   - 背景图自动识别（role 包含 'background'）
+
+2. **图层交互**
+   - 拖拽移动：鼠标按下记录初始位置，移动时计算偏移量
+   - 缩放调整：8 个方向的手柄（nw, n, ne, e, se, s, sw, w）
+   - 吸附对齐：与其他图层边缘/中心线对齐，显示辅助线
+   - 双击编辑：文字图层双击进入 contentEditable 模式
+
+3. **撤销/重做系统**
+   - 历史栈：`historyStackRef`（最多 50 步）
+   - 当前索引：`historyIndexRef`
+   - 保存时机：拖拽结束、样式修改、图层增删
+   - 撤销标记：`isUndoingRef` 防止撤销操作被记录
+
+4. **字体系统**
+   - 字体文件通过 @font-face 定义在 CSS 中
+   - 支持字体：系统默认、得意黑、阿里普惠体、江西拙楷、欣意冠黑体
+   - 字体切换通过下拉框选择，实时预览
+
+5. **分页与批量导出**
+   - 支持多页内容切换（`currentPage`）
+   - 每页独立覆写样式（`pageOverrides`）
+   - 图片层和文字层的分页数据路由（`pageOffset * itemsPerPage`）
+   - **导出引擎**：使用 `html-to-image`（已替换 html2canvas），通过 SVG foreignObject 序列化 DOM，解决文字偏移问题
+   - 导出时克隆画布 DOM，wrapper 设置 `opacity:0` 隐藏，clone 保持 `position:static`，避免 off-screen 样式被序列化
+   - 支持单页导出（当前页）和批量导出（串行处理防止内存溢出）
+
+6. **背景替换**
+   - **本地上传**：FileReader 读取本地图片，更新背景图层 URL（base64）
+   - **AI 生成**：调用 `/painter/generate/background`，支持 `txt2img` 和 `img2img` 模式
+   - **素材库选取**：通过 `magnes:switch_ext_tab` 事件打开右侧素材库侧边栏，选择后自动切回画布 Tab
+   - 背景图层自动识别（role/id/type 包含 'background'），不存在时自动创建新背景层
+
+7. **素材库集成**
+   - 精细编排节点通过全局事件与右侧素材库通信
+   - `magnes:switch_ext_tab` 打开素材库并携带 `targetNodeId` + `targetLayerId`
+   - 素材选中后通过 `magnes:switch_ext_tab` 回调更新对应图层 URL
+
+### 4.2 API 服务层（FastAPI）
+
+**核心文件**：`backend/main.py`（FastAPI 应用入口）
+
+**路由模块**：
+
+| 路由前缀 | 文件 | 职责 |
+|----------|------|------|
+| `/api/v1/tasks` | `api/task_routes.py` | Designer 工作流任务分发与状态查询 |
+| `/api/v1/dialogue` | `api/dialogue_routes.py` | Planner 对话 SSE 接口 |
+| `/api/v1/rag` | `api/rag_routes.py` | RAG 文档摄入、检索、知识库管理 |
+| `/api/v1/skills` | `api/skill_routes.py` | 技能草稿、已安装技能、技能运行 trace、反馈和补丁建议 |
+| `/api/v1/templates` | `api/template_routes.py` | 模版 CRUD |
+| `/api/v1/history` | `api/history_routes.py` | 生成历史查询 |
+| `/api/v1/export` | `api/export_routes.py` | Playwright 截图导出 |
+| `/api/v1/mcp` | `api/mcp_routes.py` | MCP 工具调用代理 |
+| `/api/v1/prompt` | `api/prompt_routes.py` | Prompt 模版管理 |
+| `/api/v1/projects` | `api/project_routes.py` | 项目持久化（CRUD、快照、操作日志、记忆回流） |
+
+**关键中间件**：
+- `CORSMiddleware`：跨域处理（当前配置需收紧）
+- `lifespan`：应用启动时初始化 LangGraph 工作流、数据库连接
+
+### 4.3 多智能体层
+
+Magnes 采用**层级结构 (Hierarchical Structures)** 与 **专家团队 (Expert Teams)** 相结合的多智能体协作模式。系统通过**意图调度专家 (Planner)** 作为指挥中心，协调三大专业领域智能体，实现从意图识别到高美感画布产出的全链路自动化。
+
+#### 智能体架构概览
+
+| 智能体 | 角色定位 | 直观职责 | 下属功能节点 |
+|--------|----------|----------|--------------|
+| **意图调度专家 (Planner Agent)** | 意图识别与任务分发中心 | 理解用户在想什么，并指派给谁做 | `planner_agent` (核心决策), `summarizer` (对话压缩) |
+| **灵感创意专家 (Creative Agent)** | 内容创作与 RAG 知识检索 | 挖掘趋势、提供创意点并撰写爆款文案 | `inspiration_analyst`, `copy_writer`, `knowledge_agent`, `ingest_urls`, `xhs_search` |
+| **画布生成专家 (Designer Agent)** | 视觉分析与画布协议合成 | 负责图层切割、视觉设计、到最后合成为画布成品 | `slicer_node`, `refiner_node`, `painter_node`, `composer_node` |
+| **质量合规专家 (Auditor Agent)** | 安全审计与美学质量评价 | 查错、避坑、评分，确保能最终上线 | `security_check`, `reviewer_node` |
+
+#### 核心智能体定义与功能映射
+
+##### 1. 意图调度专家 (Planner Agent)
+
+*   **角色定位**：意图识别与任务分发中心 (Planner/Router)
+*   **直观职责**：理解用户在想什么，并指派给谁做
+*   **命名逻辑**：负责处理复杂的"意图（Intent）"并进行"任务路由"，是整个系统的指挥官
+
+**下属功能节点**：
+- `planner_agent`: 核心决策节点，负责 LLM 意图解析与路径路由
+- `summarizer`: 对话上下文压缩与状态持久化管理
+
+**工作流**：
+```
+START
+  └─► planner_agent_node
+        ├─► copy_writer → security_check → summarizer → END
+        ├─► inspiration_analyst → summarizer → END
+        ├─► knowledge_agent → END
+        ├─► security_check → END
+        ├─► summarizer → END
+        └─► END (直接回复)
+```
+
+**路由机制**：基于 LLM 输出的 `action` 字段进行条件路由。
+
+**Fast Path 快速路径机制**：`planner_agent.py` 实现了绕过 LLM 的快速响应机制：
+- **结构化数据检测**：当检测到用户消息包含 "时间:", "地点:", "门票:" 等结构化字段时，直接触发模版选择流程
+- **UI Command Fast Path**：检测 `[技能指令] 确认选择模版:` 格式的消息，直接提取模版 ID 创建节点
+- **数字选择 Fast Path**：当用户回复纯数字时，自动映射到对应模版
+- **页签上下文感知**：根据 `activeTab`（xhs/canvas）改变行为，如 xhs 页签禁止触发电商技能
+
+**意图识别增强**：
+- **视觉激活检测**：检测消息中是否包含图片（`has_vision`）
+- **图片历史回溯**：自动从对话历史中提取上下文图片 URL，避免用户重复上传
+- **幻觉修正机制**：当 LLM 输出 `chat` action 但内容包含"分析/总结"时，自动修正为 `analyze_inspiration`
+- **技能指令注入**：当检测到 `[技能指令]` 或 `[电商生图Skill]` 标记时触发特殊处理
+
+**状态持久化**：使用 `AsyncSqliteSaver` 实现对话状态的持久化存储，支持跨会话恢复。
+
+##### 2. 灵感创意专家 (Creative Agent)
+
+*   **角色定位**：内容创作与 RAG 知识检索 (Content & RAG)
+*   **直观职责**：挖掘趋势、提供创意点并撰写爆款文案
+*   **命名逻辑**：负责所有的"非视觉"产出（文案和创意点），是设计图的"大脑支持"
+
+**下属功能节点**：
+- `inspiration_analyst`: 执行向量数据库 (Chroma) 的语义检索与灵感提炼
+- `copy_writer`: 负责生成符合小红书风格的爆款文案
+- `knowledge_agent`: 针对垂直知识库进行问答处理
+- `ingest_urls`: 外部素材（如链接）的实时抓取与初步解析
+- `xhs_search`: 小红书全网灵感实时搜索调度
+
+##### 3. 画布生成专家 (Designer Agent)
+
+*   **角色定位**：视觉分析与画布协议合成 (Design & Canvas)
+*   **直观职责**：负责图层切割、视觉设计、到最后合成为画布成品
+*   **命名逻辑**：不管中间怎么切、怎么画、怎么微调坐标，最终目标是交付一张完整的"画布（Canvas）"
+
+**下属功能节点**：
+- `slicer_node`: 执行物理图层的图像切割（U-Net/SAM 逻辑）
+- `refiner_node`: 负责画布逻辑布局建模，确定组件坐标与层级
+- `painter_node`: 驱动 AI 扩图与背景重绘（Diffusion 逻辑）
+- `composer_node`: 整合全链路资产，输出标准的 Magnes JSON 协议
+
+**工作流**（`backend/app/core/workflow.py`）：
+```
+START
+  └─► init_node
+        ├─► slicer_node (若有输入图片)
+        │     └─► painter_node (若需生图)
+        ├─► refiner_node (若有参考图)
+        │     └─► painter_node
+        └─► knowledge_agent (若需知识问答)
+              └─► END
+  painter_node / slicer_node / refiner_node
+        └─► composer_node
+              └─► reviewer_node
+                    └─► END
+```
+
+**状态对象**：`MagnesState`（TypedDict，`backend/app/schema/state.py`）
+- `input_image`：输入图片路径/URL
+- `reference_image`：参考风格图路径/URL
+- `style_prompt`：Refiner 输出的风格描述
+- `generated_background`：Painter 输出的背景图
+- `layers`：Slicer 输出的图层列表
+- `composed_html`：Composer 输出的排版 HTML
+- `copy_result`：CopyWriter 输出的文案
+- `current_step`：当前执行节点名称
+- `is_completed`：是否完成
+- `error`：错误信息
+
+##### 4. 质量合规专家 (Auditor Agent)
+
+*   **角色定位**：安全审计与美学质量评价 (Security & Quality)
+*   **直观职责**：查错、避坑、评分，确保能最终上线
+*   **命名逻辑**：扮演"考官"角色，集安全合规审查与美学评分于一身
+
+**下属功能节点**：
+- `security_check`: 敏感词过滤与输出安全性校验
+- `reviewer_node`: 对最终生成的画布进行美学评分与完整性自检
+
+#### 协作模式详解
+
+| 协作模式 | 说明 | 在项目中的体现 |
+|----------|------|----------------|
+| **层级结构** | 调度专家接收用户输入，通过条件边动态决定激活哪些后续专家节点 | `意图调度专家` → `(创意专家 + 生成专家)` → `合规专家` |
+| **专家团队** | 各智能体各司其职，每个节点拥有独立的 Prompt 模板和工具集 | 创意专家专注文字灵魂，生成专家专注视觉构建 |
+| **并行处理** | 物理切片与逻辑建模允许异步/并行执行 | `slicer_node` 与 `refiner_node` 可并行执行 |
+| **批评-审查者** | 在工作流末端闭环，对产出进行美学质量与安全政策的双重审计 | `security_check` → `reviewer_node` |
+
+#### Skill 系统架构
+
+Skill 是 Magnes 中可插拔的业务能力模块，位于 `.agent/skills/` 目录。系统支持系统内置 Skill、用户从画布保存生成的 Skill，以及后续从线上技能库导入的 Skill。运行时统一使用 `skill.json` 做轻量索引，用 `SKILL.md` 做完整执行协议。
+
+```
+.agent/skills/
+├── ecommerce-image-gen/
+│   ├── SKILL.md
+│   ├── skill.json
+│   ├── references/
+│   └── assets/
+└── user-generated/
+    └── 小红书活动合集工作流-0af1f25d/
+        ├── SKILL.md
+        ├── skill.json
+        └── CHANGELOG.md
+```
+
+**Skill 生命周期**：
+- `SkillCandidate`：技能草稿，来源可以是当前画布、最近 TaskTrace 或用户手动编辑。
+- `InstalledSkill`：启用后的技能，记录安装路径、manifest、版本、启用状态、使用次数。
+- `SkillRun`：一次技能执行 trace，记录触发来源、输入、上下文、Planner actions、工具调用、画布变化和最终输出。
+- `SkillFeedbackEvent`：用户纠正、失败、重试、结果不符合预期等反馈事件。
+- `SkillPatchProposal`：基于失败和反馈生成的技能补丁建议，用户确认后写回 SKILL.md / skill.json / CHANGELOG.md。
+
+**Skill 加载机制**：
+1. 前端显式传入 `activeSkill`，或 Planner 根据 enabled skill index 自动召回。
+2. 后端读取 `installed_skills.manifest_json`，确认启用状态、召回规则、必填参数和运行策略。
+3. `skills_loader.py` 加载对应 `SKILL.md`。
+4. `planner/skills.py` 通过 `build_skill_prompt()` 将技能协议注入 Planner prompt。
+5. Planner 在回复和工具调用中带上 `active_skill`，便于后续 SkillRun 归因。
+
+**自动召回规则**：
+- manifest 中的 `recall_rules` 采用分组判断，不做简单全文关键词命中。
+- 高置信度需要同时满足主题、动作和输出意图，且不命中 `negative_any`。
+- 缺少 `required_slots` 时进入技能但先追问，不直接调用工具。
+- `auto_run_policy` 决定行为边界：`manual_only`、`ask_if_missing`、`confirm_before_run`。
+
+**电商生图 Skill 特化逻辑**：
+- 上传商品图片或输入“电商主图/商品图/产品图”等明确意图时触发。
+- 保留专门分支 `ecommerce-image-gen`，用于视觉商品识别、分类参考图选择和 Image 1 + Image 2 角色化 Prompt。
+
+**用户生成小红书活动合集 Skill**：
+- 保存当前画布为技能草稿时，会合并画布节点步骤和最近对话 trace，例如“搜索小红书 → 总结活动 → 选择模板 → 创建精细编排节点”。
+- 启用后生成 `user-generated/*/SKILL.md` 和 `skill.json`，用于后续对话显式使用或自然语言召回。
+
+#### 小红书工具层（`backend/app/tools/xhs_mcp_tools.py`）
+
+| 工具方法 | 功能 | 执行方式 |
+|----------|------|----------|
+| `search_feeds(keyword)` | 搜索小红书笔记基础列表 | CLI/Bridge 方式获取标题、封面、互动数据和 xsec_token |
+| `get_feed_detail(feed_id, xsec_token)` | 可选详情增强 | 提取 note_card、interact_info、image_list；默认由 `XHS_ENABLE_DETAIL_ENRICH` 控制 |
+| `get_note_detail(short_url)` | 通过 URL 获取详情 | 详情增强补充方案 |
+| `publish_note(title, content, image_urls)` | 发布图文笔记 | 需用户二次确认 |
+| `get_self_info()` | 获取当前用户信息 | - |
+
+**xsec_token 管理**：从搜索结果提取并随笔记入库，供详情增强和后续溯源使用。
+
+### 4.4 记忆层（`backend/app/memory/`）
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 数据模型 | `memory/models.py` | `UserMemory`、`ConversationSummary`、`CanvasActionLog`、`MemoryEvent`、`TaskTrace`、Skill 相关模型 |
+| Schema | `memory/schemas.py` | Pydantic 请求/响应模型（`MemoryCreateRequest`、`SoulMdRequest`、`MemoryMdRequest` 等） |
+| 核心服务 | `memory/service.py` | CRUD、upsert、以及 `build_memory_summary_for_injection()` 组装 prompt-ready 摘要 |
+| 路由 | `memory/routes.py` | FastAPI 路由，挂载于 `/api/v1/memory/*` |
+
+**存储策略**：
+- Soul.md 和 MEMORY.md 均存储于 `user_memories` 表，不新增独立表。
+- `memory_type="soul"`、`key="soul_md"`、`confidence=1.0`
+- `memory_type="memory"`、`key="memory_md"`、`confidence=1.0`
+- 每个用户每种文档最多一条，按 `user_id + memory_type + key` 联合唯一约束做 upsert。
+
+**CanvasActionLog 记录机制**：
+- 前端关键操作（节点创建/删除/连线、背景替换、导出图片）主动发送 `POST /projects/action-log`
+- 项目保存（create/update/delete）时后端自动写入 CanvasActionLog
+- 日志包含：action_type、target_node_id、payload（JSON）、description（语义化描述）
+- 记录失败不影响主流程
+
+**短期会话压缩（Short-term Compaction）**：
+```
+Planner 消息增长
+  └─► token 估算 + 弱触发判断
+        ├─► 软阈值 + 阶段完成/工具链完成/项目切换/技能切换
+        ├─► 硬阈值强制压缩
+        └─► 消息数兜底阈值
+              ↓
+        Summarizer 生成摘要
+              ↓
+        写入 conversation_summaries
+              ↓
+        保留最近 8 条（硬阈值 4 条）原始消息
+```
+- 当前默认软阈值约 10k tokens，硬阈值约 14k tokens，消息数兜底阈值约 80。
+- 摘要必须保留用户目标、当前阶段、关键决策、工具结果、失败点、待办、当前项目和 activeSkill。
+- `structured_summary` 写入压缩触发原因、估算 token、保留消息数、最后 action 等调试元数据。
+
+**行为事件与任务 trace**：
+- `MemoryEvent` 是细粒度事件流，覆盖用户消息、Planner action、工具调用、工具结果、画布动作、产物创建和用户反馈。
+- `TaskTrace` 是一次任务运行的聚合视图，覆盖 user_goal、planner_actions、artifacts、outcome_status、failure_reason。
+- 两者为记忆回流、技能草稿生成和技能迭代提供共同数据底座。
+
+**记忆回流（Memory Reflux）**：
+```
+用户操作画布 → CanvasActionLog 记录 → 定期（每5分钟）LLM 分析
+                                              ↓
+                                    提取 preference/style/rejection/workflow
+                                              ↓
+                                    写入/更新 user_memories 表
+                                              ↓
+                                    下次对话注入 Planner system prompt
+```
+- 分析接口：`POST /projects/analyze-memory`（分析最近 100 条日志）
+- 预览接口：`GET /projects/memory-analysis/preview`（不写入数据库）
+- LLM 模型：`gpt-4o-mini`，输出结构化 JSON（memory_type、key、content、confidence、evidence）
+- 去重更新：同类型同 key 的记忆更新 content 和 confidence，追加 evidence
+
+**注入流程**：
+1. `dialogue_routes.py` 在调用 `run_planner()` 前，请求 `memory_service.build_memory_summary_for_injection(user_id)`。
+2. 服务层按以下顺序组装文本：
+   - Soul.md（若存在）
+   - MEMORY.md（若存在）
+   - preference 列表（从 CanvasActionLog 分析结果自动提取）
+   - rejection 列表（从 CanvasActionLog 分析结果自动提取）
+3. `run_planner()` 将摘要写入 `PlannerState.memory_summary`。
+4. `router.py` 的 `call_model()` 在 `ROUTER_PROMPT` 前追加 `[用户设定]\n{memory_summary}\n\n---\n\n`。
+
+### 4.5 RAG 层（`backend/app/rag/`）
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 数据摄入 | `rag/ingestion/` | URL/文件/文本摄入，切块，向量化，存入 ChromaDB |
+| 向量存储 | `rag/vectorstore/` | ChromaDB 集合管理，向量 CRUD |
+| 混合检索 | `rag/retrieval/` | BM25 + 向量检索并行，RRF 融合排序 |
+| 风格记忆 | `rag/style_memory_agent.py` | 记录用户风格偏好，生成个性化检索上下文 |
+| 配置 | `rag/config.py` | 模型、分块策略（chunk_size=512, overlap=50）、ChromaDB 路径 |
+
+**检索流程**：
+1. 查询向量化（Embedding）
+2. ChromaDB 向量检索（top-k=5）
+3. BM25 关键词检索（top-k=5）
+4. RRF（Reciprocal Rank Fusion）融合，返回最终 top-5 结果
+5. 注入 LLM 上下文（RAG Prompt）
+
+### 4.6 核心服务层（`backend/app/core/`）
+
+| 文件 | 职责 |
+|------|------|
+| `llm_config.py` | LLM 实例工厂，支持 OpenAI 兼容接口，通过环境变量切换 Provider |
+| `database.py` | SQLAlchemy + aiosqlite 异步引擎与 Session 工厂 |
+| `image_generator.py` | Playwright 无头浏览器，HTML → 高分辨率 PNG |
+| `mcp_client.py` | MCP 协议客户端，连接外部 MCP Server |
+| `storage_utils.py` | 图片 URL 下载并持久化到本地，返回本地路径 |
+| `skills_loader.py` | 扫描 `skills/` 目录，动态加载业务技能包 |
+| `prompts.py` | 中央 Prompt 库，所有 Agent 的 System Prompt 统一管理 |
+
+## 5. 序列图
+
+### 5.1 Designer 工作流执行序列（生成小红书海报）
+
+```mermaid
+sequenceDiagram
+    participant F as 前端画布
+    participant T as TaskAPI
+    participant W as Designer Workflow
+    participant S as Slicer Agent
+    participant R as Refiner Agent
+    participant P as Painter Agent
+    participant C as Composer Agent
+    participant DB as SQLite
+
+    F->>T: POST /api/v1/tasks/run {input_image, reference_image, template_id}
+    T->>W: 初始化 MagnesState，启动 LangGraph 图
+    W->>S: slicer_node(input_image)
+    S-->>W: layers: [{name, mask, description}]
+    W->>R: refiner_node(reference_image)
+    R-->>W: style_prompt: "清新日系，高饱和..."
+    W->>P: painter_node(style_prompt, layers)
+    P->>外部生图API: POST {prompt, width, height}
+    外部生图API-->>P: image_url
+    P-->>W: generated_background: "local/path/bg.png"
+    W->>C: composer_node(layers, background, copy_result, template_id)
+    C-->>W: composed_html: "<div class='poster'>...</div>"
+    W->>DB: INSERT INTO generation_history
+    W-->>T: MagnesState.is_completed = true
+    T-->>F: SSE: {"type":"done", "result":{...}}
+```
+
+### 5.2 Planner 对话序列（文案生成）
+
+```mermaid
+sequenceDiagram
+    participant F as 对话面板
+    participant D as DialogAPI (SSE)
+    participant P as Planner Agent
+    participant CW as CopyWriter Agent
+    participant SC as SecurityCheck Agent
+    participant DB as SQLite
+
+    F->>D: POST /api/v1/dialogue/run {"message": "帮我写一篇秋季穿搭的小红书文案"}
+    D-->>F: SSE: {"type":"progress","agent":"planner","message":"理解中..."}
+    D->>P: planner_agent_node(message, history)
+    P->>OpenAI: LLM 推理，解析意图
+    OpenAI-->>P: {"action": "copy_writer", "params": {"topic": "秋季穿搭"}}
+    D-->>F: SSE: {"type":"progress","agent":"copy_writer","message":"正在生成文案..."}
+    P->>CW: copy_writer_node(topic, style, keywords)
+    CW->>OpenAI: 生成小红书文案
+    OpenAI-->>CW: {title, body, tags}
+    CW->>SC: security_check_node(text)
+    SC-->>CW: {"passed": true}
+    CW-->>P: copy_result: {title, body, tags}
+    P->>DB: 保存对话历史
+    D-->>F: SSE: {"type":"result","data":{title, body, tags}}
+    D-->>F: SSE: {"type":"done"}
+```
+
+### 5.3 记忆注入序列
+
+```mermaid
+sequenceDiagram
+    participant F as 对话面板
+    participant D as DialogAPI
+    participant M as Memory Service
+    participant DB as SQLite
+    participant P as Planner Agent
+
+    F->>D: POST /api/v1/dialogue/run {message, conversation_id}
+    D->>M: build_memory_summary_for_injection(user_id)
+    M->>DB: SELECT * FROM user_memories WHERE user_id=? AND memory_type="soul"
+    DB-->>M: soul_md content
+    M->>DB: SELECT * FROM user_memories WHERE user_id=? AND memory_type="memory"
+    DB-->>M: memory_md content
+    M-->>D: memory_summary 文本块
+    D->>P: run_planner(message, memory_summary=...)
+    P->>P: 将 memory_summary 拼接到 ROUTER_PROMPT 前
+    P->>OpenAI: LLM 推理（带用户设定上下文）
+```
+
+### 5.4 图片导出序列
+
+```mermaid
+sequenceDiagram
+    participant F as 前端画布
+    participant E as ExportAPI
+    participant PW as Playwright
+    participant FS as 本地文件系统
+
+    F->>E: POST /api/v1/export/image {html: "...", width: 1080, height: 1440}
+    E->>PW: 启动无头 Chromium
+    PW->>PW: 渲染 HTML，等待字体/图片加载完成
+    PW->>PW: page.screenshot({type:"png", clip:{...}})
+    PW-->>E: PNG 二进制数据
+    E->>FS: 写入 exports/{timestamp}.png
+    E-->>F: {"url": "/exports/{timestamp}.png", "size": "2.3MB"}
+```
+
+### 5.5 文案润色序列
+
+```mermaid
+sequenceDiagram
+    participant F as 草稿编辑器
+    participant R as RAG API
+    participant L as LLM Service
+
+    F->>F: 用户选中文本
+    F->>R: POST /api/v1/rag/rewrite {text, action, instructions}
+    R->>L: 调用 LLM 进行润色/缩写/扩写
+    L-->>R: 优化后的文本
+    R-->>F: {status: "success", result: "..."}
+    F->>F: 替换选中文本或展示预览
+```
+
+### 5.6 项目自动保存序列
+
+```mermaid
+sequenceDiagram
+    participant F as ReactFlow 画布
+    participant FE as 前端 app.js
+    participant PR as ProjectAPI
+    participant DB as SQLite
+
+    F->>FE: 用户拖拽/编辑节点（nodes/edges变化）
+    FE->>FE: 清除上一定时器，启动 2s debounce
+    Note over FE: 2秒后触发自动保存
+    FE->>PR: PUT /api/v1/projects/{id} {nodes, edges, viewport, actionHint: "auto_save"}
+    PR->>DB: UPDATE projects 表
+    PR->>DB: INSERT canvas_action_logs（action_type="auto_save"）
+    PR-->>FE: {status: "success"}
+    FE->>FE: 记录 lastMemoryAnalysisRef
+    Note over FE: 每隔5分钟触发记忆分析
+    FE->>PR: POST /api/v1/projects/analyze-memory {limit: 100}
+    PR->>DB: SELECT canvas_action_logs（最近100条）
+    PR->>OpenAI: LLM 分析日志提取偏好
+    OpenAI-->>PR: {preferences: [...], summary: "..."}
+    PR->>DB: UPSERT user_memories（preference/style/rejection/workflow）
+    PR-->>FE: {status: "success", extracted: [...]}
+```
+
+### 5.7 记忆回流序列
+
+```mermaid
+sequenceDiagram
+    participant AL as CanvasActionLog
+    participant PR as ProjectRoutes
+    participant LLM as LLM (gpt-4o-mini)
+    participant UM as UserMemory
+    participant PL as Planner Agent
+
+    AL->>PR: 积累用户操作日志（node_create/asset_replace/edge_connect等）
+    Note over PR: 定时触发（每5分钟）或手动触发
+    PR->>LLM: 发送最近100条日志描述文本
+    LLM->>LLM: 分析用户行为模式
+    LLM-->>PR: {preferences: [{memory_type, key, content, confidence, evidence}]}
+    PR->>UM: 查询是否已有同类型同key记忆
+    UM-->>PR: 返回现有记忆或null
+    alt 已存在
+        PR->>UM: UPDATE content/confidence/evidence
+    else 不存在
+        PR->>UM: INSERT 新记忆
+    end
+    Note over PL: 下次对话时
+    PL->>UM: build_memory_summary_for_injection(user_id)
+    UM-->>PL: Soul.md + MEMORY.md + preference + rejection
+    PL->>PL: 拼接到 ROUTER_PROMPT 前
+    PL->>OpenAI: LLM 推理（带用户偏好上下文）
+```
+
+### 5.8 技能草稿生成、启用与迭代序列
+
+```mermaid
+sequenceDiagram
+    participant F as 前端技能库/画布
+    participant S as Skill API
+    participant DB as SQLite
+    participant FS as .agent/skills
+    participant P as Planner Agent
+
+    F->>S: POST /api/v1/skills/candidates/from-canvas {projectId,nodes,edges,conversationId}
+    S->>DB: 查询最近 TaskTrace，合并画布节点步骤
+    S->>DB: INSERT skill_candidates(status="draft")
+    S-->>F: 返回技能草稿
+
+    F->>S: POST /api/v1/skills/candidates/{id}/install
+    S->>FS: 写入 user-generated/*/SKILL.md
+    S->>FS: 写入 skill.json(manifest)
+    S->>DB: UPSERT installed_skills(enabled=1, version="1.0.0")
+    S-->>F: 返回已启用技能
+
+    F->>P: 对话发送 activeSkill 或自然语言命中技能
+    P->>DB: 读取 enabled skill manifest
+    P->>FS: 加载 SKILL.md
+    P->>P: 注入技能执行协议
+    P->>DB: INSERT/UPDATE skill_runs
+
+    alt 用户纠正或运行失败
+        F->>S: POST /api/v1/skills/runs/{id}/feedback
+        S->>DB: INSERT skill_feedback_events
+        S->>DB: INSERT skill_patch_proposals(status="pending")
+        F->>S: PATCH /api/v1/skills/patch-proposals/{id} {status:"applied"}
+        S->>FS: 追加 SKILL.md Learned Updates
+        S->>FS: 更新 skill.json version / learned_updates
+        S->>FS: 追加 CHANGELOG.md
+        S->>DB: 更新 installed_skills.version
+    end
+```
+
+## 6. 错误与回退策略
+
+| 场景 | 处理方式 |
+|------|----------|
+| LangGraph 图执行超时（>10min） | `asyncio.wait_for` 捕获，返回已完成节点的部分结果 |
+| Painter 生图 API 失败（3次重试后） | Composer 跳过背景图层，使用纯色/渐变兜底 |
+| Slicer/Refiner 视觉模型失败 | 跳过该节点，style_prompt 使用默认值，layers 为空 |
+| RAG 检索失败 | 不注入检索上下文，LLM 使用自身知识生成 |
+| Playwright 截图失败 | 返回 500 错误，前端提示用户重试 |
+| SQLite 写入失败 | 记录错误日志，不影响当前生成任务的结果返回 |
+| SSE 连接中断 | 前端自动重连（最多3次），重连后查询任务最新状态 |
+| MCP 工具调用失败 | 捕获异常，跳过该工具调用，继续执行其他节点 |
+| 文案润色失败 | 保留原文案，提示用户重试或手动编辑 |
+| 小红书 Bridge/CLI 连接失败 | 返回环境预检失败信息，引导用户检查 Chrome、扩展和登录状态 |
+| xsec_token 过期/失效 | 基础笔记仍可入库；详情增强使用新的搜索结果 token |
+| 技能召回置信度低 | 不展示推荐，避免干扰普通对话 |
+| 技能缺必填参数 | 进入技能上下文但先追问，不直接调用工具 |
+| 技能补丁建议风险高 | 只展示建议，必须用户确认后才写回 SKILL.md |
+| Memory 注入失败 | 记录日志，不影响对话执行，`memory_summary` 为空字符串继续 |
+| Soul.md / MEMORY.md 保存失败 | 前端 alert 提示用户重试，不自动重试避免覆盖 |
+
+## 7. 扩展点
+
+- **新增 Agent**：在 `backend/app/agents/` 下新建文件，在 `workflow.py` 或 `planner/graph.py` 中注册节点即可。
+- **新增节点类型**：在 `frontend/src/nodes/rf/` 下新建组件，在 `app.js` 的 `nodeTypes` 映射表中注册。
+- **新增生图引擎**：在 `tools/painting_tool.py` 中添加新的 Provider 分支，通过环境变量切换。
+- **数据库迁移**：SQLite → PostgreSQL，只需修改 `core/database.py` 中的连接字符串。
+- **RAG 扩展**：在 `rag/ingestion/` 中添加新的数据源适配器（如爬虫、数据库导入）。
+- **技能包扩展**：在 `backend/app/skills/` 目录下新增技能包，`skills_loader.py` 自动发现加载。
+- **外部 Skill 封装**：外部 Skill 通过 Magnes 后端 API 调用对话流、项目、RAG、导出和技能接口。
+- **记忆系统扩展**：新增 `memory_type` 即可支持新的记忆类别；前端在 `AppModals.js` 中新增 Tab 和表单即可暴露新的记忆编辑入口。
+- **自动学习扩展**：在 `memory/service.py` 中增加对话摘要自动提取逻辑，将 LLM 总结结果写入 `preference` / `rejection` / `workflow` 类型记忆。
+
+## 8. 安全与合规
+
+- 所有 API Key 和 SessionID 通过 `.env` 管理，禁止在前端 JS 或代码仓库中硬编码。
+- 生产环境使用 HTTPS，建议配合 Nginx 反向代理和 API Gateway。
+- CORS 策略收紧到具体域名，禁止 `null` origin。
+- 所有 API 路由添加 Bearer Token 认证，防止未授权访问消耗 AI API 配额。
+- 生成历史存储于本地 SQLite，不上传外部服务；支持配置数据保留策略（如 90 天自动清理）。
+- 敏感词检测在文案发布前强制执行，过滤违禁内容。
+
+## 9. 日志与监控建议
+
+- **日志**：使用 Python `logging` 模块输出结构化日志，包含 `task_id`、Agent 名称、耗时、错误信息。
+- **关键指标**：
+  - 任务完成率（completed / total）
+  - 各 Agent 平均执行时长
+  - 外部 AI API 调用成功率与耗时
+  - RAG 检索命中率
+  - Playwright 导出成功率
+- **监控建议**：接入 Prometheus + Grafana，或使用云端 APM（如阿里云 ARMS）。
+- **告警场景**：Painter 连续 5 次失败、LLM 调用 P99 > 30s、SQLite 写入错误率 > 1%。

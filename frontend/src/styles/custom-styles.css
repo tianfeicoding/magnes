@@ -1,0 +1,15 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #09090b;
+}
+
+/* Prevent selection during drag */
+.select-none {
+    user-select: none;
+}
+
+/* Allow selection in chat */
+.select-text {
+    user-select: text;
+}

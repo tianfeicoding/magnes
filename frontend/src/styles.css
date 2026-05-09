@@ -1,0 +1,288 @@
+/* Global Styles */
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #09090b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Utilities */
+.select-none {
+    user-select: none;
+}
+
+.select-text {
+    user-select: text;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(161, 161, 170, 0.2);
+    /* zinc-400/20 */
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(161, 161, 170, 0.4);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(161, 161, 170, 0.2);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(161, 161, 170, 0.4);
+}
+
+/* Animations */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Artistic Loader (V2) */
+.art-loader-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #09090b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    color: #e4e4e7;
+}
+
+.art-center-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translateY(-20px);
+}
+
+.art-visual {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 30px;
+}
+
+.art-ring-outer {
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    animation: art-breathe 4s ease-in-out infinite;
+}
+
+.art-ring-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-top-color: #fff;
+    border-left-color: rgba(255, 255, 255, 0.3);
+    opacity: 0.8;
+    animation: art-spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.art-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    background-color: #fff;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.art-title {
+    font-size: 12px;
+    font-weight: 300;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    opacity: 0.9;
+    margin-bottom: 8px;
+}
+
+.art-status {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: #71717a;
+    letter-spacing: 0.1em;
+    animation: art-pulse 2s ease-in-out infinite;
+}
+
+@keyframes art-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes art-breathe {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.5;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.2;
+    }
+}
+
+@keyframes art-pulse {
+
+    0%,
+    100% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
+}
+
+@keyframes art-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* Precision Monochrome Extensions */
+
+:root {
+    --mono-black: #000000;
+    --mono-white: #ffffff;
+    --mono-gray-dark: #1f1f1f;
+    --mono-gray-light: #f5f5f5;
+    --mono-border: #000000;
+    --mono-shadow: 4px 4px 0px 0px #000000;
+    --mono-shadow-hover: 6px 6px 0px 0px #000000;
+}
+
+/* 0px Radius Global Override for Nodes and UI */
+.mono-rect, 
+.mono-node,
+.mono-button, 
+.mono-input,
+.mono-card {
+    border-radius: 0px !important;
+}
+
+/* Hard Shadows */
+.mono-shadow {
+    box-shadow: var(--mono-shadow);
+}
+
+.mono-shadow-hover:hover {
+    box-shadow: var(--mono-shadow-hover);
+}
+
+/* Patterns */
+.bg-hatched {
+    background-color: var(--mono-white);
+    background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        #e5e5e5 10px,
+        #e5e5e5 11px
+    );
+}
+
+.bg-dot-pattern {
+    background-color: var(--mono-white);
+    background-image: radial-gradient(#d1d1d1 1px, transparent 1px);
+    background-size: 16px 16px;
+}
+
+/* Typography Classes */
+.font-serif-header {
+    font-family: 'Playfair Display', serif;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.font-mono-ui {
+    font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+}
+
+/* Node Handle Square Style */
+.react-flow__handle {
+    border-radius: 0px !important;
+    width: 12px !important;
+    height: 12px !important;
+    background: var(--mono-black) !important;
+    border: 1px solid var(--mono-white) !important;
+}
+
+/* Custom Component Overrides */
+.mono-input {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid #d1d5db !important;
+    transition: all 0.2s ease;
+}
+
+.mono-input:focus {
+    border-bottom: 2px solid var(--mono-black) !important;
+    background: var(--mono-gray-light) !important;
+    outline: none !important;
+}
+
+.mono-button-primary {
+    background: var(--mono-black) !important;
+    color: var(--mono-white) !important;
+    height: 32px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.mono-button-secondary {
+    background: var(--mono-white) !important;
+    color: var(--mono-black) !important;
+    border: 1px solid var(--mono-black) !important;
+    height: 32px;
+    padding: 0 16px;
+}

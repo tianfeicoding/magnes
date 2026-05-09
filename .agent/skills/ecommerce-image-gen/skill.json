@@ -1,0 +1,77 @@
+{
+  "id": "ecommerce-image-gen",
+  "name": "电商商品图片生成 Skill",
+  "description": "上传商品图片后识别商品类型，并生成适合电商主图的生图方案。",
+  "source": "system_builtin",
+  "tools": [
+    "image_generation",
+    "visual_analysis",
+    "ecommerce_workflow"
+  ],
+  "triggers": [
+    "上传商品图片",
+    "电商主图",
+    "商品图",
+    "产品图",
+    "生成电商图片"
+  ],
+  "usage_summary": [
+    "输入：上传商品图片，或说明要处理的商品图。",
+    "可选：提供 1-3 张参考图，或说明想要的主图风格。",
+    "流程：先识别商品名称、分类和核心特征，再生成电商主图 Prompt。",
+    "出图：确认生成后调用生图工具，并将结果同步到画布。"
+  ],
+  "workflow_steps": [
+    {
+      "index": 1,
+      "phase": "dialogue",
+      "label": "上传商品图片",
+      "description": "用户上传商品图片后，系统展示电商生图 Skill 入口。"
+    },
+    {
+      "index": 2,
+      "phase": "dialogue",
+      "label": "识别商品",
+      "description": "分析商品名称、分类、颜色、材质、用途和核心特征。"
+    },
+    {
+      "index": 3,
+      "phase": "dialogue",
+      "label": "确认生成主图",
+      "description": "询问用户是否需要生成电商主图，并收集参考图或风格偏好。"
+    },
+    {
+      "index": 4,
+      "phase": "tool",
+      "label": "生成电商主图",
+      "description": "基于商品图和参考风格调用图像生成工具。"
+    },
+    {
+      "index": 5,
+      "phase": "canvas",
+      "label": "同步画布",
+      "description": "将生成结果同步到画布，方便继续编辑。"
+    }
+  ],
+  "recall_keywords": [
+    "电商",
+    "商品",
+    "主图",
+    "商品图",
+    "产品图",
+    "参考图",
+    "生图",
+    "生成图片"
+  ],
+  "recall_rules": {
+    "must_have_any": ["电商", "商品", "主图", "商品图", "产品图"],
+    "topic_any": ["商品", "产品", "主图", "商拍", "详情页"],
+    "action_any": ["生成", "优化", "做", "换背景"],
+    "output_any": ["图片", "主图", "商品图", "产品图"],
+    "negative_any": ["小红书活动", "市集", "展览", "切分图层", "分层", "海报"]
+  },
+  "required_slots": ["商品图片"],
+  "risk_level": "high",
+  "auto_run_policy": "confirm_before_run",
+  "version": "1.0.0"
+}

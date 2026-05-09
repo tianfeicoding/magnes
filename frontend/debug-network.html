@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head><title>Network Debug</title></head>
+<body>
+    <h1>网络请求调试</h1>
+    <div id="logs"></div>
+    <script>
+        // 拦截 fetch 请求
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const [url, options] = args;
+            if (url.includes('/tasks/run') && options?.body) {
+                try {
+                    const body = JSON.parse(options.body);
+                    console.log('发送请求:', url, body);
+                    document.getElementById('logs').innerHTML += `
+                        <div style="border:1px solid #000; margin:10px; padding:10px">
+                            <b>${new Date().toLocaleTimeString()}</b><br>
+                            URL: ${url}<br>
+                            Type: ${body.type}<br>
+                            Options: <pre>${JSON.stringify(body.options, null, 2)}</pre>
+                        </div>
+                    `;
+                } catch(e) {}
+            }
+            return originalFetch.apply(this, args);
+        };
+        document.getElementById('logs').innerHTML = '<p>等待请求...请在 Magnes 中触发风格分析</p>';
+    </script>
+</body>
+</html>

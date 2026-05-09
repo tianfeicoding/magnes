@@ -1,0 +1,24 @@
+{
+  "name": "openclaw-for-magnes",
+  "version": "1.3.0",
+  "description": "OpenClaw for Magnes - 整合 xiaohongshu-skills 和活动提取器，支持合集拆分、智能排序，提供搜索→提取活动→生成海报的完整工作流",
+  "author": "OpenClaw",
+  "entry": "SKILL.md",
+  "config": {
+    "xiaohongshu_skills_path": {
+      "type": "string",
+      "default": "./xiaohongshu-skills",
+      "description": "xiaohongshu-skills 路径"
+    },
+    "magnes_api_url": {
+      "type": "string",
+      "default": "http://localhost:8088",
+      "description": "Magnes 后端 API 地址（仅用于海报生成）"
+    },
+    "data_dir": {
+      "type": "string",
+      "default": "./data",
+      "description": "数据存储目录"
+    }
+  }
+}

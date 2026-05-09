@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>DraggableText 样式测试</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="../templates.js"></script>
+</head>
+
+<body style="padding: 20px;">
+    <h1>DraggableText 样式测试</h1>
+
+    <div style="display: flex; gap: 20px; margin-top: 20px;">
+        <div style="border: 2px solid #ccc; padding: 20px;">
+            <h3>测试 1: 默认 22px</h3>
+            <div id="test1"></div>
+        </div>
+
+        <div style="border: 2px solid #ccc; padding: 20px;">
+            <h3>测试 2: 强制 32px</h3>
+            <div id="test2"></div>
+        </div>
+
+        <div style="border: 2px solid #ccc; padding: 20px;">
+            <h3>测试 3: 强制 48px + !important</h3>
+            <div id="test3"></div>
+        </div>
+    </div>
+
+    <script>
+        const { DraggableText } = window.RednoteTemplates;
+
+        // 测试 1: 默认 22px
+        ReactDOM.render(
+            React.createElement(DraggableText, {
+                text: '标题文字 (22px)',
+                style: { fontSize: '22px', color: 'blue' },
+                className: 'font-bold',
+                isEditable: false
+            }),
+            document.getElementById('test1')
+        );
+
+        // 测试 2: 强制 32px
+        ReactDOM.render(
+            React.createElement(DraggableText, {
+                text: '标题文字 (32px)',
+                style: { fontSize: '32px', color: 'red' },
+                className: 'font-bold',
+                isEditable: false
+            }),
+            document.getElementById('test2')
+        );
+
+        // 测试 3: 48px + !important
+        ReactDOM.render(
+            React.createElement('div', {
+                style: { fontSize: '48px !important', color: 'green', fontWeight: 'bold' }
+            }, '标题文字 (48px !important)'),
+            document.getElementById('test3')
+        );
+
+        console.log('✅ 测试页面加载完成');
+        console.log('如果看到三个不同大小的文字，说明 style.fontSize 可以正常工作');
+    </script>
+</body>
+
+</html>
